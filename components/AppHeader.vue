@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 const props = defineProps<{
-  activePage: 'overview' | 'exercises' | 'tools'
+  activePage: 'overview' | 'exercises' | 'analytics' | 'tools'
 }>()
 
 const { settings, setLanguage } = useWorkoutStorage()
@@ -44,7 +44,9 @@ const toggleLanguage = () => {
       <NuxtLink to="/exercises" class="app-navigation-link" :class="{ active: props.activePage === 'exercises' }">
         {{ t.exercises }}
       </NuxtLink>
-      <button type="button" class="app-navigation-link">{{ t.logbook }}</button>
+      <NuxtLink to="/analytics" class="app-navigation-link" :class="{ active: props.activePage === 'analytics' }">
+        {{ t.logbook }}
+      </NuxtLink>
       <NuxtLink to="/tools" class="app-navigation-link" :class="{ active: props.activePage === 'tools' }">
         {{ t.tools }}
       </NuxtLink>
