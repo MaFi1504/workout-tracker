@@ -3,7 +3,7 @@
 This plan organizes the app by feature and milestone so it can be implemented incrementally in a Nuxt project.
 
 ## Product goal
-Build a progressive workout tracker that helps the user log training sessions, track weights and reps, compare progress over time, and work offline from the device without needing a backend.
+Build a progressive workout tracker that helps the user record a complete workout while following a video or routine. A workout contains multiple exercises, and every exercise records its rounds with the weight and reps completed. The app compares each exercise across all workouts so the user can see the last performance and choose whether to increase weight or reps next time.
 
 ## Feature ordering
 1. Exercise catalog and search
@@ -34,14 +34,17 @@ Build a progressive workout tracker that helps the user log training sessions, t
 - [milestones/M4-analytics-offline-i18n.md](milestones/M4-analytics-offline-i18n.md)
 
 ## Key product requirements
-- Save each workout as a separate entry containing multiple exercises and multiple rounds.
-- Record weight used and number of reps completed per exercise.
+- Save each workout session as one parent object containing multiple ordered exercises.
+- Record each exercise's rounds, with the weight and reps completed for every round.
+- Keep exercise history independent of the parent workout so the same movement can be compared across different routines.
+- Show the latest weight and reps for an exercise before or during a new workout to support progressive overload decisions.
 - Distinguish between single-sided and synchronized execution.
 - Allow user-created exercises and searchable lookup when adding an entry.
 - Load a base exercise list from the server, stored as JSON for easy extension.
 - Provide a tap-to-count rep interaction for quick logging.
 - Support weights in 1, 3, 5, 8, and 10 kg increments, including lb/kg conversion.
-- Show progress trends across days, weeks, months, and custom ranges.
+- Show weight, reps, and volume trends for each exercise across days, weeks, months, and custom ranges.
+- Provide graphs and summary comparisons for the latest performance, previous performance, and best performance of each exercise.
 - Default language is English, with German available in the header.
 - Persist data locally on the device and minimize remote dependency for offline use.
 

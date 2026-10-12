@@ -18,4 +18,6 @@ This project plan is split into feature documents and milestone documents.
 - [docs/plan/milestones/M4-analytics-offline-i18n.md](docs/plan/milestones/M4-analytics-offline-i18n.md)
 
 ## Overview
-The app is planned as a Nuxt-based, local-first workout tracker for logging workouts, exercises, reps, and weights while staying usable offline. It will support English and German, allow custom exercises, and visualize long-term progress from daily training history.
+The app is planned as a Nuxt-based, local-first workout tracker for recording a complete workout session while following a video or routine. Each persisted `Workout` contains multiple exercises, and each exercise contains the rounds recorded during that session. Exercise history is aggregated across all workouts so progress can be compared even when the same exercise appears in different routines.
+
+The app will support English and German, allow custom exercises, stay usable offline, and visualize weight, reps, and volume trends over time.

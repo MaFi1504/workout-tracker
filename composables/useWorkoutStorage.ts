@@ -9,14 +9,32 @@ export interface Exercise {
   description: string
 }
 
-export interface WorkoutEntry {
+export type WorkoutSide = 'single' | 'synchronized'
+
+export interface RoundEntry {
+  id: string
+  round: number
+  weightKg: number
+  reps: number
+  side?: 'left' | 'right' | 'both'
+}
+
+export interface WorkoutExercise {
   id: string
   exerciseId: string
-  exerciseName: string
+  order: number
+  side: WorkoutSide
+  rounds: RoundEntry[]
+}
+
+export interface Workout {
+  id: string
   date: string
-  sets: number
-  reps: number
-  weight: number
+  createdAt?: string
+  title: string
+  source?: string
+  workoutType?: string
+  exercises: WorkoutExercise[]
   notes: string
 }
 
@@ -26,7 +44,8 @@ export interface WorkoutSettings {
 
 const STORAGE_KEYS = {
   customExercises: 'workout:custom-exercises',
-  workouts: 'workout:entries',
+  workouts: 'workout:sessions',
+  legacyWorkouts: 'workout:entries',
   settings: 'workout:settings'
 } as const
 
@@ -103,6 +122,55 @@ const writeStorage = <T>(key: string, value: T) => {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
+const normalizeWorkouts = (value: unknown): Workout[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  if (value.every((item) => item && Array.isArray((item as Workout).exercises))) {
+    return value as Workout[]
+  }
+
+  return value.flatMap((item, index) => {
+    const legacy = item as {
+      id?: string
+      exerciseId?: string
+      date?: string
+      sets?: number
+      reps?: number
+      weight?: number
+      notes?: string
+    }
+
+    if (!legacy.exerciseId) {
+      return []
+    }
+
+    const sets = Math.max(legacy.sets || 1, 1)
+    const workoutId = legacy.id || `migrated-workout-${index}`
+
+    return [{
+      id: workoutId,
+      date: legacy.date || new Date().toISOString().slice(0, 10),
+      title: 'Imported workout',
+      exercises: [{
+        id: `${workoutId}-exercise`,
+        exerciseId: legacy.exerciseId,
+        order: 0,
+        side: 'synchronized',
+        rounds: Array.from({ length: sets }, (_, roundIndex) => ({
+          id: `${workoutId}-round-${roundIndex}`,
+          round: roundIndex + 1,
+          weightKg: legacy.weight || 0,
+          reps: legacy.reps || 0,
+          side: 'both'
+        }))
+      }],
+      notes: legacy.notes || ''
+    }]
+  })
+}
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -116,12 +184,15 @@ export const useWorkoutStorage = () => {
     'custom-exercises',
     () => readStorage(STORAGE_KEYS.customExercises, [])
   )
-  const workouts = useState<WorkoutEntry[]>(
+  const storedWorkouts = readStorage<unknown>(STORAGE_KEYS.workouts, null)
+  const workouts = useState<Workout[]>(
     'workout-entries',
-    () => readStorage(STORAGE_KEYS.workouts, [])
+    () => normalizeWorkouts(
+      storedWorkouts ?? readStorage(STORAGE_KEYS.legacyWorkouts, [])
+    )
   )
   const settings = useState<WorkoutSettings>('workout-settings', () => ({
-    language: readStorage(STORAGE_KEYS.settings, { language: 'en' }).language || 'en'
+    language: readStorage<WorkoutSettings>(STORAGE_KEYS.settings, { language: 'en' }).language || 'en'
   }))
 
   if (import.meta.client) {
@@ -176,14 +247,15 @@ export const useWorkoutStorage = () => {
     return exercise
   }
 
-  const addWorkout = (entry: Omit<WorkoutEntry, 'id'>) => {
-    const nextEntry: WorkoutEntry = {
-      ...entry,
-      id: `${entry.exerciseId}-${Date.now()}`
+  const addWorkout = (workout: Omit<Workout, 'id'>) => {
+    const nextWorkout: Workout = {
+      ...workout,
+      id: `workout-${Date.now()}`,
+      createdAt: workout.createdAt || new Date().toISOString()
     }
 
-    workouts.value = [nextEntry, ...workouts.value]
-    return nextEntry
+    workouts.value = [nextWorkout, ...workouts.value]
+    return nextWorkout
   }
 
   return {

@@ -1,51 +1,59 @@
 # Feature 02: Workout Recording
 
 ## Objective
-Allow the user to save workouts as separate entities that contain multiple exercises and multiple rounds.
+Allow the user to record one complete workout session as a parent entity containing multiple exercises, with each exercise storing the rounds completed during that session.
 
 ## Requirements
-- Each workout is a standalone log entry.
-- One workout may contain 7 exercises or more.
-- Each exercise may be repeated across 3 rounds or any user-defined round count.
-- Metadata includes date, notes, and workout title.
-- User can add exercises, adjust reps, sets, and round count within a record.
+- Each workout is a standalone session and parent log entry.
+- One workout may contain 7 exercises or more in a defined order.
+- Each exercise may contain 3 rounds or any user-defined number of round entries.
+- Every round stores the weight and reps actually completed; values may differ between rounds.
+- Metadata includes date, notes, title, and optional source or workout type.
+- User can add exercises, reorder them, and record or correct rounds while the session is in progress.
 
 ## Data model
 ```ts
-interface WorkoutRecord {
+interface Workout {
   id: string
   date: string
   title: string
-  exercises: ExerciseEntry[]
+  exercises: WorkoutExercise[]
+  source?: string
+  workoutType?: string
   notes?: string
 }
 
-interface ExerciseEntry {
+interface WorkoutExercise {
+  id: string
   exerciseId: string
-  rounds: number
+  order: number
   side: 'single' | 'synchronized'
-  entries: RepEntry[]
+  rounds: RoundEntry[]
 }
 
-interface RepEntry {
+interface RoundEntry {
+  round: number
   weightKg: number
   reps: number
-  side?: 'left' | 'right'
+  side?: 'left' | 'right' | 'both'
 }
 ```
 
 ## UX flow
-1. User creates a workout.
-2. User selects exercises and adds them to the workout.
-3. User chooses round count and movement side type.
-4. User enters weight and reps as needed.
-5. Workout is saved to local storage.
+1. User starts a workout and optionally gives it a title or links it to a video or routine.
+2. User selects exercises and adds them to the workout in the order they will be performed.
+3. User chooses the round count and movement side type for each exercise.
+4. While following the workout, user records the weight and reps for each completed round.
+5. User can view the previous performance for the selected exercise without leaving the active workout.
+6. The parent workout, its exercises, and all round entries are saved to local storage.
 
 ## Acceptance criteria
 - A workout can include multiple exercises and rounds.
+- The stored shape has one parent workout with nested workout exercises and round entries.
+- A round preserves its own weight and reps instead of only storing an exercise total.
 - Logged values remain editable after creation.
-- Records can be filtered by date and exercise.
-- Workouts are stored independently for later analytics.
+- Workouts can be filtered by date, title/type, and exercise.
+- Exercise analytics can aggregate round entries across all parent workouts.
 
 ## Milestone mapping
 - M2: Workout creation flow

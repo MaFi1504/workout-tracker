@@ -2,7 +2,7 @@
 
 ## Goals
 - Initialize Nuxt app structure.
-- Define data model for workouts, exercises, and rep entries.
+- Define the parent-child data model for workouts, workout exercises, and round entries.
 - Add local storage foundation and app shell.
 - Set default English language and header structure.
 
@@ -14,7 +14,9 @@
 
 ## Scope
 - Base app scaffold
-- Model definitions for exercises and workouts
+- Exercise catalog model
+- `Workout` session model containing ordered `WorkoutExercise` records
+- `WorkoutExercise` model containing one `RoundEntry` per recorded round
 - Local caching patterns
 - Data validation hooks
 
@@ -22,3 +24,5 @@
 - App boots and renders without errors.
 - App stores data locally on the device.
 - Basic exercise seed file is available.
+- A workout can be represented without duplicating the exercise catalog definition.
+- Round entries preserve the weight and reps recorded for each exercise in a session.

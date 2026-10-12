@@ -18,7 +18,16 @@ Support exercises that are logged separately per limb and exercises that are tra
 type SideType = 'single' | 'synchronized'
 
 type RepMode = 'left' | 'right' | 'both'
+
+interface RoundEntry {
+	round: number
+	weightKg: number
+	reps: number
+	side?: RepMode
+}
 ```
+
+For synchronized exercises, one round entry represents the combined movement. For single-sided exercises, the workout exercise can store separate left and right round entries for the same round number so each side remains reportable.
 
 ## Acceptance criteria
 - Users can choose the correct mode during record creation.
