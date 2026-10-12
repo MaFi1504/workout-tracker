@@ -63,6 +63,7 @@ button:disabled {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  min-width: 0;
 }
 
 .app-title {
@@ -74,6 +75,7 @@ button:disabled {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .app-navigation-link,
@@ -187,5 +189,20 @@ button:disabled {
 
   .app-navigation {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-navigation {
+    gap: 0.45rem;
+  }
+
+  .app-navigation-link {
+    padding: 0.55rem 0.7rem;
+    font-size: 0.9rem;
+  }
+
+  .app-language-button {
+    justify-self: start;
   }
 }

@@ -1028,12 +1028,42 @@ p {
 
 @media (max-width: 760px) {
   .two-column-layout {
-    grid-template-columns: 1fr;
-    display: grid;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .two-column-layout > .panel:nth-child(2) {
+    order: -1;
   }
 
   .workout-item {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .content {
+    padding: 1.25rem 0.85rem 2rem;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+
+  .round-row {
+    grid-template-columns: minmax(4.25rem, 0.65fr) minmax(0, 1fr) auto;
+    gap: 0.45rem;
+  }
+
+  .counter-button {
+    width: 2.5rem;
+    min-width: 2.5rem;
+  }
+
+  .round-row .rep-count-input {
+    width: 3.25rem;
+    min-width: 3.25rem;
+    flex-basis: 3.25rem;
   }
 }
 </style>

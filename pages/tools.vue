@@ -449,5 +449,13 @@ select {
   .tools-content {
     padding: 1.25rem 1rem 2rem;
   }
+
+  .converter-form {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-card {
+    padding: 1rem;
+  }
 }
 </style>
