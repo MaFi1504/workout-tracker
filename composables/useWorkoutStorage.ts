@@ -9,6 +9,18 @@ export interface Exercise {
   description: string
 }
 
+export const EXERCISE_CATEGORIES = [
+  'Shoulders',
+  'Chest',
+  'Legs',
+  'Back',
+  'Arms',
+  'Cardio',
+  'General'
+] as const
+
+export type ExerciseCategory = typeof EXERCISE_CATEGORIES[number]
+
 export type WorkoutSide = 'single' | 'synchronized'
 
 export interface RoundEntry {
@@ -56,7 +68,7 @@ const baseExercises: Exercise[] = [
     category: 'Shoulders',
     defaultWeightUnit: 'kg',
     isCustom: false,
-    description: 'Standing front shoulder raise'
+    description: 'Stand tall with light weights at your sides. Raise both arms forward to shoulder height, then lower them slowly without swinging.'
   },
   {
     id: 'push-up',
@@ -64,7 +76,7 @@ const baseExercises: Exercise[] = [
     category: 'Chest',
     defaultWeightUnit: 'kg',
     isCustom: false,
-    description: 'Bodyweight press for the upper body'
+    description: 'Start in a high plank with hands under your shoulders. Lower your chest with a straight body, then press the floor away to return to the top.'
   },
   {
     id: 'lat-raise',
@@ -72,7 +84,7 @@ const baseExercises: Exercise[] = [
     category: 'Shoulders',
     defaultWeightUnit: 'kg',
     isCustom: false,
-    description: 'Lateral raise with controlled tempo'
+    description: 'Stand with weights by your sides. Lift your arms out to shoulder height with soft elbows, pause briefly, and lower them under control.'
   },
   {
     id: 'bench-press',
@@ -80,7 +92,7 @@ const baseExercises: Exercise[] = [
     category: 'Chest',
     defaultWeightUnit: 'kg',
     isCustom: false,
-    description: 'Barbell bench press for strength'
+    description: 'Lie on the bench with feet grounded and the bar over your chest. Lower it to mid-chest with control, then press it up while keeping your wrists stacked.'
   },
   {
     id: 'squat',
@@ -88,7 +100,7 @@ const baseExercises: Exercise[] = [
     category: 'Legs',
     defaultWeightUnit: 'kg',
     isCustom: false,
-    description: 'Barbell squat for total leg strength'
+    description: 'Set your feet about shoulder-width apart. Sit your hips down and back with a braced torso, then drive through your feet to stand tall.'
   },
   {
     id: 'deadlift',
@@ -96,7 +108,7 @@ const baseExercises: Exercise[] = [
     category: 'Back',
     defaultWeightUnit: 'kg',
     isCustom: false,
-    description: 'Classic hip hinge strength movement'
+    description: 'Stand with the bar over your mid-foot. Hinge at the hips with a neutral back, grip the bar, and stand by driving your feet into the floor.'
   }
 ]
 
@@ -178,6 +190,11 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'custom-exercise'
 
+const normalizeCategory = (value: string): ExerciseCategory =>
+  EXERCISE_CATEGORIES.includes(value.trim() as ExerciseCategory)
+    ? value.trim() as ExerciseCategory
+    : 'General'
+
 export const useWorkoutStorage = () => {
   const seedExercises = useState<Exercise[]>('seed-exercises', () => baseExercises)
   const customExercises = useState<Exercise[]>(
@@ -229,7 +246,7 @@ export const useWorkoutStorage = () => {
     const exercise: Exercise = {
       id: `${slugify(name)}-${Date.now()}`,
       name,
-      category: input.category.trim() || 'General',
+      category: normalizeCategory(input.category),
       defaultWeightUnit: input.defaultWeightUnit || 'kg',
       isCustom: true,
       description: input.description.trim() || 'Custom exercise added by the user.'
@@ -245,6 +262,40 @@ export const useWorkoutStorage = () => {
 
     customExercises.value = [exercise, ...customExercises.value]
     return exercise
+  }
+
+  const updateExercise = (id: string, input: { name: string; category: string; description: string; defaultWeightUnit: 'kg' | 'lb' }) => {
+    const name = input.name.trim()
+    const index = customExercises.value.findIndex((exercise) => exercise.id === id)
+
+    if (!name || index < 0) {
+      return null
+    }
+
+    const duplicate = [...customExercises.value, ...seedExercises.value].find(
+      (exercise) => exercise.id !== id && exercise.name.toLowerCase() === name.toLowerCase()
+    )
+
+    if (duplicate) {
+      return null
+    }
+
+    const existingExercise = customExercises.value[index]
+
+    if (!existingExercise) {
+      return null
+    }
+
+    const updatedExercise: Exercise = {
+      ...existingExercise,
+      name,
+      category: normalizeCategory(input.category),
+      description: input.description.trim() || 'Custom exercise added by the user.',
+      defaultWeightUnit: input.defaultWeightUnit || 'kg'
+    }
+
+    customExercises.value[index] = updatedExercise
+    return updatedExercise
   }
 
   const addWorkout = (workout: Omit<Workout, 'id'>) => {
@@ -265,6 +316,7 @@ export const useWorkoutStorage = () => {
     settings,
     setLanguage,
     addExercise,
+    updateExercise,
     addWorkout
   }
 }

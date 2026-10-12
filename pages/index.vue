@@ -1,39 +1,33 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import type { Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
+import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
 
-const { settings, customExercises, workouts, seedExercises, addExercise, addWorkout, setLanguage } = useWorkoutStorage()
+const { settings, customExercises, workouts, seedExercises, addWorkout } = useWorkoutStorage()
 
 const search = ref('')
 const selectedExerciseId = ref('front-raise')
 const draftExercises = ref<WorkoutExercise[]>([])
-const newExercise = reactive({
-  name: '',
-  category: 'General',
-  description: '',
-  defaultWeightUnit: 'kg' as 'kg' | 'lb'
-})
-
 const form = reactive({
   date: new Date().toISOString().slice(0, 10),
   title: 'Lower Body workout',
   notes: ''
 })
 
+const commonWeightsKg = [1, 3, 5, 8, 10] as const
+const weightDialogOpen = ref(false)
+const weightDialogRound = ref<RoundEntry | null>(null)
+const weightDialogValue = ref(0)
+
 const translations = {
   en: {
-    appName: 'Workout Progress',
+    appName: 'Workout Tracker',
     overview: 'Overview',
     exercises: 'Exercises',
     logbook: 'Logbook',
+    tools: 'Tools',
     language: 'DE',
     searchPlaceholder: 'Search exercises',
-    addExercise: 'Add custom exercise',
     addToWorkout: 'Add to workout',
-    exerciseName: 'Exercise name',
-    category: 'Category',
-    description: 'Description',
-    unit: 'Weight unit',
     totalExercises: 'Exercises',
     totalWorkouts: 'Workouts',
     workoutTitle: 'Workout title',
@@ -61,22 +55,25 @@ const translations = {
     reps: 'Reps',
     weight: 'Weight',
     notes: 'Notes',
+    quickWeights: 'Quick weights',
+    weightDialog: 'Select weight',
+    currentWeight: 'Current weight',
+    apply: 'Apply weight',
+    cancel: 'Cancel',
+    increaseRep: 'Count one rep',
+    decreaseRep: 'Remove one rep',
     save: 'Save workout',
     englishLabel: 'English'
   },
   de: {
-    appName: 'Workout Fortschritt',
+    appName: 'Workout Tracker',
     overview: 'Übersicht',
     exercises: 'Übungen',
     logbook: 'Protokoll',
+    tools: 'Werkzeuge',
     language: 'EN',
     searchPlaceholder: 'Übungen suchen',
-    addExercise: 'Eigene Übung hinzufügen',
     addToWorkout: 'Zum Training hinzufügen',
-    exerciseName: 'Übungsname',
-    category: 'Kategorie',
-    description: 'Beschreibung',
-    unit: 'Gewichtseinheit',
     totalExercises: 'Übungen',
     totalWorkouts: 'Trainingseinheiten',
     workoutTitle: 'Name des Trainings',
@@ -104,6 +101,13 @@ const translations = {
     reps: 'Wiederholungen',
     weight: 'Gewicht',
     notes: 'Notizen',
+    quickWeights: 'Schnellgewichte',
+    weightDialog: 'Gewicht auswählen',
+    currentWeight: 'Aktuelles Gewicht',
+    apply: 'Gewicht übernehmen',
+    cancel: 'Abbrechen',
+    increaseRep: 'Eine Wiederholung zählen',
+    decreaseRep: 'Eine Wiederholung entfernen',
     save: 'Training speichern',
     englishLabel: 'Deutsch'
   }
@@ -167,6 +171,44 @@ const parseStoredDate = (value: string) => new Date(
 
 const formatGermanDate = (value: string) => germanDateFormatter.format(parseStoredDate(value))
 const formatGermanDateTime = (value: string) => germanDateTimeFormatter.format(parseStoredDate(value))
+
+const openWeightDialog = (round: RoundEntry) => {
+  weightDialogRound.value = round
+  weightDialogValue.value = round.weightKg
+  weightDialogOpen.value = true
+}
+
+const closeWeightDialog = () => {
+  weightDialogOpen.value = false
+  weightDialogRound.value = null
+}
+
+const applyWeightDialog = () => {
+  if (weightDialogRound.value) {
+    weightDialogRound.value.weightKg = Math.max(0, Number(weightDialogValue.value) || 0)
+  }
+
+  closeWeightDialog()
+}
+
+const incrementReps = (round: RoundEntry) => {
+  round.reps = Math.max(0, Number(round.reps) || 0) + 1
+}
+
+const decrementReps = (round: RoundEntry) => {
+  round.reps = Math.max(0, (Number(round.reps) || 0) - 1)
+}
+
+const normalizeReps = (round: RoundEntry) => {
+  round.reps = Math.max(0, Number.parseInt(String(round.reps), 10) || 0)
+}
+
+const handleSideChange = (exercise: WorkoutExercise) => {
+  exercise.rounds = exercise.rounds.map((round) => ({
+    ...round,
+    side: exercise.side === 'single' ? (round.side === 'both' ? 'left' : round.side) : 'both'
+  }))
+}
 
 const latestWorkoutExercise = (exerciseId: string) => workouts.value
   .flatMap((workout) => workout.exercises
@@ -243,7 +285,7 @@ const addSelectedExercise = () => {
     side: previousExercise?.side || 'synchronized',
     rounds: previousExercise
       ? cloneRounds(exercise.id, previousExercise.rounds)
-      : createRounds(exercise.id, exercise.defaultWeightUnit === 'lb' ? 25 : 20)
+      : createRounds(exercise.id, 10)
   })
 }
 
@@ -298,29 +340,6 @@ onMounted(async () => {
 
 })
 
-const toggleLanguage = () => {
-  setLanguage(settings.value.language === 'en' ? 'de' : 'en')
-}
-
-const handleAddExercise = () => {
-  const exercise = addExercise({
-    name: newExercise.name,
-    category: newExercise.category,
-    description: newExercise.description,
-    defaultWeightUnit: newExercise.defaultWeightUnit
-  })
-
-  if (!exercise) {
-    return
-  }
-
-  selectedExerciseId.value = exercise.id
-  newExercise.name = ''
-  newExercise.category = 'General'
-  newExercise.description = ''
-  newExercise.defaultWeightUnit = 'kg'
-}
-
 const handleAddWorkout = () => {
   if (!form.date || !form.title.trim() || !draftExercises.value.length) {
     return
@@ -349,22 +368,7 @@ const handleAddWorkout = () => {
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Local-first training</p>
-        <h1>{{ t.appName }}</h1>
-      </div>
-
-      <nav class="main-nav" aria-label="Main navigation">
-        <button type="button" class="nav-pill active">{{ t.overview }}</button>
-        <button type="button" class="nav-pill">{{ t.exercises }}</button>
-        <button type="button" class="nav-pill">{{ t.logbook }}</button>
-      </nav>
-
-      <button type="button" class="language-toggle" @click="toggleLanguage">
-        {{ t.language }}
-      </button>
-    </header>
+    <AppHeader active-page="overview" />
 
     <main class="content">
       <section class="overview-grid">
@@ -416,35 +420,6 @@ const handleAddWorkout = () => {
           <button type="button" class="primary-button" @click="addSelectedExercise">
             {{ t.addToWorkout }}
           </button>
-
-          <form class="inline-form" @submit.prevent="handleAddExercise">
-            <h3>{{ t.addExercise }}</h3>
-
-            <label>
-              {{ t.exerciseName }}
-              <input v-model="newExercise.name" type="text" />
-            </label>
-
-            <label>
-              {{ t.category }}
-              <input v-model="newExercise.category" type="text" />
-            </label>
-
-            <label>
-              {{ t.unit }}
-              <select v-model="newExercise.defaultWeightUnit">
-                <option value="kg">kg</option>
-                <option value="lb">lb</option>
-              </select>
-            </label>
-
-            <label>
-              {{ t.description }}
-              <textarea v-model="newExercise.description" rows="3" />
-            </label>
-
-            <button type="submit" class="primary-button">{{ t.addExercise }}</button>
-          </form>
         </div>
 
         <div class="panel">
@@ -499,14 +474,16 @@ const handleAddWorkout = () => {
                       :title="t.remove"
                       @click="removeDraftExercise(exercise.id)"
                     >
-                      <span aria-hidden="true">×</span>
+                      <svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
                     </button>
                   </div>
                 </div>
 
                 <label>
                   {{ t.side }}
-                  <select v-model="exercise.side">
+                  <select v-model="exercise.side" @change="handleSideChange(exercise)">
                     <option value="synchronized">{{ t.synchronized }}</option>
                     <option value="single">{{ t.single }}</option>
                   </select>
@@ -521,22 +498,62 @@ const handleAddWorkout = () => {
 
                 <div class="round-list">
                   <div v-for="round in exercise.rounds" :key="round.id" class="round-row">
-                    <span>{{ t.round }} {{ round.round }}</span>
-                    <label>
-                      {{ t.weight }}
-                      <input v-model.number="round.weightKg" type="number" min="0" step="0.5" />
-                    </label>
-                    <label>
-                      {{ t.reps }}
-                      <input v-model.number="round.reps" type="number" min="0" />
-                    </label>
+                    <div class="round-info">
+                      <span class="round-label">{{ t.round }} {{ round.round }}</span>
+                      <label>
+                        {{ t.weight }} (kg)
+                        <input
+                          :value="`${round.weightKg} kg`"
+                          type="text"
+                          readonly
+                          class="weight-trigger"
+                          :aria-label="t.weightDialog"
+                          @click="openWeightDialog(round)"
+                          @keydown.enter="openWeightDialog(round)"
+                        />
+                      </label>
+                    </div>
+                    <div class="round-measurement reps-measurement">
+                      <span class="measurement-label">{{ t.reps }}</span>
+                      <div class="rep-controls">
+                        <button
+                          type="button"
+                          class="icon-button counter-button"
+                          :aria-label="t.decreaseRep"
+                          :title="t.decreaseRep"
+                          @click="decrementReps(round)"
+                        >
+                          −
+                        </button>
+                        <input
+                          v-model.number="round.reps"
+                          type="text"
+                          inputmode="numeric"
+                          pattern="[0-9]*"
+                          class="rep-count-input"
+                          :aria-label="t.reps"
+                          @change="normalizeReps(round)"
+                        />
+                        <button
+                          type="button"
+                          class="icon-button counter-button"
+                          :aria-label="t.increaseRep"
+                          :title="t.increaseRep"
+                          @click="incrementReps(round)"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      class="icon-button"
+                      class="icon-button remove-button"
                       :aria-label="`${t.remove} ${t.round} ${round.round}`"
                       @click="removeRound(exercise, round.id)"
                     >
-                      ×
+                      <svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -590,87 +607,61 @@ const handleAddWorkout = () => {
 
         <p v-else class="empty-state">{{ t.noWorkouts }}</p>
       </section>
+
+      <div
+        v-if="weightDialogOpen"
+        class="weight-dialog-backdrop"
+        role="presentation"
+        @click.self="closeWeightDialog"
+      >
+        <section class="weight-dialog" role="dialog" aria-modal="true" :aria-label="t.weightDialog">
+          <div class="panel-header">
+            <h2>{{ t.weightDialog }}</h2>
+            <button type="button" class="icon-button" :aria-label="t.cancel" :title="t.cancel" @click="closeWeightDialog">
+              <svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+
+          <label>
+            {{ t.currentWeight }} (kg)
+            <input v-model.number="weightDialogValue" type="number" min="0" step="0.5" autofocus />
+          </label>
+
+          <div class="dialog-presets" :aria-label="t.quickWeights">
+            <button
+              v-for="weight in commonWeightsKg"
+              :key="weight"
+              type="button"
+              class="weight-preset"
+              :class="{ selected: weightDialogValue === weight }"
+              @click="weightDialogValue = weight"
+            >
+              {{ weight }} kg
+            </button>
+          </div>
+
+          <div class="dialog-actions">
+            <button type="button" class="secondary-button" @click="closeWeightDialog">{{ t.cancel }}</button>
+            <button type="button" class="primary-button" @click="applyWeightDialog">{{ t.apply }}</button>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-:global(body) {
-  margin: 0;
-  background: #f4f6fb;
-  color: #101828;
-  font-family: Inter, 'Segoe UI', sans-serif;
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
-
 .app-shell {
   min-height: 100vh;
   background: linear-gradient(180deg, #edf4ff 0%, #f8fafc 100%);
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.2rem 2rem;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.eyebrow {
-  margin: 0 0 0.25rem;
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  color: #4f46e5;
-}
-
-h1,
 h2,
 h3,
 p {
   margin: 0;
-}
-
-h1 {
-  font-size: clamp(2rem, 2vw + 1rem, 2.5rem);
-}
-
-.main-nav {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.nav-pill,
-.language-toggle,
-.primary-button,
-.exercise-card {
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-}
-
-.nav-pill {
-  padding: 0.65rem 1rem;
-  background: #eef2ff;
-  color: #312e81;
-}
-
-.language-toggle,
-.primary-button {
-  padding: 0.7rem 1.1rem;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  color: white;
 }
 
 .content {
@@ -742,7 +733,10 @@ h1 {
 .exercise-list {
   display: grid;
   gap: 0.75rem;
+  max-height: 20rem;
+  overflow-y: auto;
   margin-top: 1rem;
+  padding: 0.25rem;
 }
 
 .draft-exercise-list {
@@ -793,50 +787,99 @@ h1 {
 }
 
 .round-row {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 0.7fr) minmax(0, 2fr) auto;
   align-items: end;
+  gap: 0.75rem;
 }
 
-.round-row > span {
-  min-width: 4.5rem;
-  padding-bottom: 0.8rem;
+.round-info {
+  display: grid;
+  align-self: start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.round-label {
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.round-measurement {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.reps-measurement {
+  min-width: 0;
+}
+
+.measurement-label {
   color: #475569;
   font-size: 0.85rem;
 }
 
-.secondary-button,
-.icon-button {
-  border: 0;
+.rep-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.weight-trigger {
+  cursor: pointer;
+  background: #eef2ff;
+  color: #312e81;
+  font-weight: 600;
+}
+
+.weight-preset {
+  min-width: 2.1rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #334155;
   cursor: pointer;
 }
 
-.secondary-button {
-  justify-self: start;
-  padding: 0.55rem 0.8rem;
-  border-radius: 10px;
+.weight-preset.selected {
+  border-color: #4f46e5;
   background: #e0e7ff;
   color: #312e81;
+  font-weight: 600;
 }
 
-.icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
+.round-row .rep-count-input {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  flex: 0 0 3.5rem;
+  padding: 0.55rem 0.35rem;
+  border: 1px solid #a5b4fc;
   border-radius: 10px;
-  background: #e2e8f0;
-  color: #334155;
+  background: #eef2ff;
+  color: #312e81;
+  font-weight: 700;
+  text-align: center;
 }
 
-.remove-button {
-  background: #fee2e2;
-  color: #b91c1c;
+.counter-button {
+  width: 3.25rem;
+  min-width: 3.25rem;
+  height: 2.75rem;
+  padding: 0;
+  font-size: 1.25rem;
 }
 
-.icon-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
+.rep-count-input:focus {
+  outline: 2px solid rgba(79, 70, 229, 0.35);
+  outline-offset: 1px;
+}
+
+.draft-exercise > .secondary-button {
+  justify-self: start;
 }
 
 .previous-performance {
@@ -866,6 +909,7 @@ h1 {
 .exercise-card.selected {
   background: #e0e7ff;
   outline: 2px solid rgba(79, 70, 229, 0.35);
+  outline-offset: 2px;
 }
 
 .exercise-name {
@@ -940,24 +984,52 @@ h1 {
   white-space: nowrap;
 }
 
+.weight-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.weight-dialog {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 28rem);
+  padding: 1.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
+}
+
+.dialog-presets {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.dialog-presets .weight-preset {
+  min-height: 2.75rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
 .empty-state {
   color: #475569;
   padding: 1rem 0 0;
 }
 
 @media (max-width: 760px) {
-  .topbar,
   .two-column-layout {
     grid-template-columns: 1fr;
     display: grid;
-  }
-
-  .topbar {
-    padding: 1rem;
-  }
-
-  .main-nav {
-    justify-content: flex-start;
   }
 
   .workout-item {
