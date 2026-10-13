@@ -195,6 +195,9 @@ const normalizeCategory = (value: string): ExerciseCategory =>
     ? value.trim() as ExerciseCategory
     : 'General'
 
+// Tracks whether the client has already re-read localStorage after SSR hydration.
+let hasHydratedFromStorage = false
+
 export const useWorkoutStorage = () => {
   const seedExercises = useState<Exercise[]>('seed-exercises', () => baseExercises)
   const customExercises = useState<Exercise[]>(
@@ -213,6 +216,19 @@ export const useWorkoutStorage = () => {
   }))
 
   if (import.meta.client) {
+    // useState's initializer only runs on the server, so the client must
+    // re-read localStorage itself once hydration has handed over the SSR payload.
+    if (!hasHydratedFromStorage) {
+      hasHydratedFromStorage = true
+      customExercises.value = readStorage(STORAGE_KEYS.customExercises, customExercises.value)
+      workouts.value = normalizeWorkouts(
+        readStorage<unknown>(STORAGE_KEYS.workouts, null) ?? readStorage(STORAGE_KEYS.legacyWorkouts, workouts.value)
+      )
+      settings.value = {
+        language: readStorage<WorkoutSettings>(STORAGE_KEYS.settings, settings.value).language || 'en'
+      }
+    }
+
     watch(
       customExercises,
       (value) => writeStorage(STORAGE_KEYS.customExercises, value),
