@@ -12,7 +12,8 @@ describe('measurement tools', () => {
 
 describe('workout records', () => {
   it('preserves round measurements and calculates nested volume', () => { const entry = workout(); expect(entry.exercises[0]?.rounds.map(({ weightKg, reps }) => ({ weightKg, reps }))).toEqual([{ weightKg: 5, reps: 10 }, { weightKg: 6, reps: 8 }]); expect(exerciseVolume(entry.exercises[0]!)).toBe(98); expect(workoutVolume(entry)).toBe(98) })
-  it('validates order and distinguishes synchronized from single-sided entries', () => { const entry = workout(); expect(validateWorkout(entry)).toBe(true); entry.exercises[0]!.rounds[1]!.weightKg = -1; expect(validateWorkout(entry)).toBe(false); expect(validateWorkout(workout({ exercises: [{ ...workout().exercises[0]!, side: 'single', rounds: [{ id: 'left', round: 1, weightKg: 5, reps: 10, side: 'left' }] }] }))).toBe(true) })
+  it('counts paired weights for synchronized rounds', () => { const entry = workout(); entry.exercises[0]!.rounds = [{ id: 'paired', round: 1, weightKg: 5, weightCount: 2, reps: 10, side: 'both' }]; expect(exerciseVolume(entry.exercises[0]!)).toBe(100) })
+  it('validates mixed synchronized and single-sided rounds', () => { const entry = workout(); expect(validateWorkout(entry)).toBe(true); entry.exercises[0]!.rounds[1]!.weightKg = -1; expect(validateWorkout(entry)).toBe(false); expect(validateWorkout(workout({ exercises: [{ ...workout().exercises[0]!, side: 'single', rounds: [{ id: 'both', round: 1, weightKg: 5, reps: 10, side: 'both' }, { id: 'left', round: 2, weightKg: 5, reps: 10, side: 'left' }] }] }))).toBe(true) })
 })
 
 describe('history and filters', () => {

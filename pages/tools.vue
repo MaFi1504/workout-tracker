@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { parseWorkoutNotes } from '~/utils/workoutImport'
+import { findMatchingExercise } from '~/utils/exerciseMatching'
 
 const { settings, customExercises, workouts, seedExercises, addExercise, addWorkout } = useWorkoutStorage()
 
@@ -23,29 +24,18 @@ const importSource = ref('')
 const importPreview = computed(() => parseWorkoutNotes(importSource.value))
 const availableExercises = computed(() => [...seedExercises.value, ...customExercises.value])
 
-const normalizeExerciseName = (value: string) => value
-  .toLowerCase()
-  .replace(/\bpushups\b/g, 'push up')
-  .replace(/[^a-z0-9]+/g, ' ')
-  .trim()
-  .split(' ')
-  .map((word) => word.endsWith('s') ? word.slice(0, -1) : word)
-  .join(' ')
-
 const importWorkout = () => {
   if (!importText.title.trim() || !importText.date || !importPreview.value.length) {
     return
   }
 
   const importedExercises = importPreview.value.flatMap((item, exerciseIndex) => {
-    let exercise = availableExercises.value.find(
-      (candidate) => normalizeExerciseName(candidate.name) === normalizeExerciseName(item.name)
-    )
+    let exercise = findMatchingExercise(availableExercises.value, item.name)
 
     if (!exercise) {
       exercise = addExercise({
         name: item.name,
-        category: 'General',
+        tags: ['General'],
         description: 'Imported exercise. Add detailed instructions in the Exercises page.',
         defaultWeightUnit: 'kg'
       }) || undefined
@@ -302,14 +292,15 @@ p {
 }
 
 .tool-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.25rem;
+  column-width: 280px;
+  column-gap: 1.25rem;
 }
 
 .tool-card {
   display: grid;
   gap: 1.25rem;
+  break-inside: avoid;
+  margin-bottom: 1.25rem;
   padding: 1.35rem;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 20px;
@@ -441,8 +432,7 @@ select {
 }
 
 .tool-card-placeholder {
-  align-content: center;
-  min-height: 10rem;
+  align-content: start;
 }
 
 @media (max-width: 640px) {
@@ -452,6 +442,10 @@ select {
 
   .converter-form {
     grid-template-columns: 1fr;
+  }
+
+  .tool-grid {
+    columns: 1;
   }
 
   .tool-card {

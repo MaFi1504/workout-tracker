@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { parseWorkoutNotes } from '../utils/workoutImport'
+import { findMatchingExercise } from '../utils/exerciseMatching'
+import type { Exercise } from '../composables/useWorkoutStorage'
+
+const exercises: Exercise[] = [
+  { id: 'lat-raise', name: 'Lateral Raises', aliases: ['Lat Raise', 'Lat Raises'], tags: ['Shoulders'], defaultWeightUnit: 'kg', isCustom: false, description: '' },
+  { id: 'romanian-deadlift', name: 'Romanian Deadlift', aliases: ['Romanian Deadlifts', 'RDL', 'RDLs'], tags: ['Legs', 'Back'], defaultWeightUnit: 'kg', isCustom: false, description: '' }
+]
 
 describe('workout note import', () => {
   it('groups repeated measurement lines into exercise rounds and ignores trailing notes', () => {
@@ -38,5 +45,12 @@ OverheadTrice Extensions
         rounds: [{ weightKg: 0, reps: 10 }]
       }
     ])
+  })
+
+  it('matches aliases and normalized plural variants to canonical exercises', () => {
+    expect(findMatchingExercise(exercises, 'Lat Raises')?.id).toBe('lat-raise')
+    expect(findMatchingExercise(exercises, 'lateral raise')?.id).toBe('lat-raise')
+    expect(findMatchingExercise(exercises, 'Romanian Deadlifts')?.id).toBe('romanian-deadlift')
+    expect(findMatchingExercise(exercises, 'RDL')?.id).toBe('romanian-deadlift')
   })
 })

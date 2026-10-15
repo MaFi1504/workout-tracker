@@ -8,17 +8,22 @@ Create a reusable exercise library that supports user-created exercises while lo
 - Example exercises include: Front Raises, Push Ups, Lat Raises, and similar training movements.
 - Exercises can be added manually by the user.
 - Search input supports filtering exercises when adding a new workout record.
-- Each exercise has fields such as name, category, type, default unit, and notes.
+- Playlist exercises include detailed form instructions and link back to their source video.
+- Exercises may use multiple tags, such as `Chest` and `Arms`.
+- Canonical exercises may define aliases (for example, `Lateral Raises` / `Lat Raises` and `Romanian Deadlift` / `RDL`).
+- Workout imports use normalized names, explicit aliases, and conservative unambiguous token matching instead of unrestricted fuzzy matching.
+- Each exercise has fields such as name, tags, type, default unit, notes, and an optional source video.
 
 ## Data model
 ```json
 {
   "id": "front-raise",
   "name": "Front Raise",
-  "category": "shoulders",
+  "tags": ["shoulders", "arms"],
   "defaultWeightUnit": "kg",
   "isCustom": false,
-  "description": "Standing front shoulder raise"
+  "description": "Standing front shoulder raise",
+  "videoUrl": "https://www.youtube.com/watch?v=bTH8I20UZ-c"
 }
 ```
 

@@ -17,6 +17,7 @@ const commonWeightsKg = [1, 3, 5, 8, 10] as const
 const weightDialogOpen = ref(false)
 const weightDialogRound = ref<RoundEntry | null>(null)
 const weightDialogValue = ref(0)
+const weightDialogCount = ref<1 | 2>(1)
 
 const translations = {
   en: {
@@ -62,6 +63,8 @@ const translations = {
     cancel: 'Cancel',
     increaseRep: 'Count one rep',
     decreaseRep: 'Remove one rep',
+    roundSynchronized: 'Synchronized round',
+    roundSingle: 'Single-sided round',
     save: 'Save workout',
     englishLabel: 'English'
   },
@@ -108,6 +111,8 @@ const translations = {
     cancel: 'Abbrechen',
     increaseRep: 'Eine Wiederholung zählen',
     decreaseRep: 'Eine Wiederholung entfernen',
+    roundSynchronized: 'Synchrone Runde',
+    roundSingle: 'Einseitige Runde',
     save: 'Training speichern',
     englishLabel: 'Deutsch'
   }
@@ -124,7 +129,7 @@ const filteredExercises = computed(() => {
   }
 
   return availableExercises.value.filter((exercise) =>
-    exercise.name.toLowerCase().includes(term) || exercise.category.toLowerCase().includes(term)
+    exercise.name.toLowerCase().includes(term) || exercise.tags.some((tag) => tag.toLowerCase().includes(term))
   )
 })
 
@@ -132,7 +137,7 @@ const totalVolume = computed(() =>
   workouts.value.reduce(
     (workoutTotal, workout) => workoutTotal + workout.exercises.reduce(
       (exerciseTotal, exercise) => exerciseTotal + exercise.rounds.reduce(
-        (roundTotal, round) => roundTotal + round.weightKg * round.reps,
+        (roundTotal, round) => roundTotal + round.weightKg * (round.weightCount || 1) * round.reps,
         0
       ),
       0
@@ -145,7 +150,10 @@ const exerciseName = (exerciseId: string) =>
   availableExercises.value.find((exercise) => exercise.id === exerciseId)?.name || exerciseId
 
 const roundSummary = (exercise: WorkoutExercise) =>
-  exercise.rounds.map((round) => `${round.weightKg} kg x ${round.reps}`).join(' · ')
+  exercise.rounds.map((round) => `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg x ${round.reps}`).join(' · ')
+
+const roundWeightLabel = (round: RoundEntry) =>
+  `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg`
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -175,6 +183,7 @@ const formatGermanDateTime = (value: string) => germanDateTimeFormatter.format(p
 const openWeightDialog = (round: RoundEntry) => {
   weightDialogRound.value = round
   weightDialogValue.value = round.weightKg
+  weightDialogCount.value = round.weightCount || 1
   weightDialogOpen.value = true
 }
 
@@ -186,6 +195,7 @@ const closeWeightDialog = () => {
 const applyWeightDialog = () => {
   if (weightDialogRound.value) {
     weightDialogRound.value.weightKg = Math.max(0, Number(weightDialogValue.value) || 0)
+    weightDialogRound.value.weightCount = weightDialogCount.value
   }
 
   closeWeightDialog()
@@ -203,11 +213,9 @@ const normalizeReps = (round: RoundEntry) => {
   round.reps = Math.max(0, Number.parseInt(String(round.reps), 10) || 0)
 }
 
-const handleSideChange = (exercise: WorkoutExercise) => {
-  exercise.rounds = exercise.rounds.map((round) => ({
-    ...round,
-    side: exercise.side === 'single' ? (round.side === 'both' ? 'left' : round.side) : 'both'
-  }))
+const toggleRoundMode = (exercise: WorkoutExercise, round: RoundEntry) => {
+  round.side = round.side === 'both' ? 'left' : 'both'
+  exercise.side = exercise.rounds.every((item) => item.side === 'both') ? 'synchronized' : 'single'
 }
 
 const latestWorkoutExercise = (exerciseId: string) => workouts.value
@@ -242,6 +250,8 @@ const loadWorkout = (workout: Workout) => {
   selectedExerciseId.value = draftExercises.value[0]?.exerciseId || selectedExerciseId.value
 }
 
+const openWorkout = (workout: Workout) => navigateTo(`/workouts/${workout.id}`)
+
 const previousPerformance = (exerciseId: string) => {
   const match = workouts.value
     .flatMap((workout) => workout.exercises
@@ -265,6 +275,7 @@ const createRounds = (exerciseId: string, weightKg: number) =>
     id: `${exerciseId}-round-${Date.now()}-${index}`,
     round: index + 1,
     weightKg,
+    weightCount: 1 as const,
     reps: 10,
     side: 'both' as const
   }))
@@ -316,6 +327,7 @@ const addRound = (exercise: WorkoutExercise) => {
     id: `${exercise.id}-round-${Date.now()}`,
     round: exercise.rounds.length + 1,
     weightKg: previousRound?.weightKg || 0,
+    weightCount: previousRound?.weightCount || 1,
     reps: previousRound?.reps || 10,
     side: exercise.side === 'single' ? undefined : 'both'
   })
@@ -380,7 +392,7 @@ const handleAddWorkout = () => {
           <span>{{ t.totalWorkouts }}</span>
           <strong>{{ workouts.length }}</strong>
         </article>
-        <article class="metric-card">
+        <article class="metric-card active-goal">
           <span>{{ t.activeGoal }}</span>
           <strong>Consistency</strong>
         </article>
@@ -413,7 +425,7 @@ const handleAddWorkout = () => {
               @click="selectedExerciseId = exercise.id"
             >
               <span class="exercise-name">{{ exercise.name }}</span>
-              <span class="exercise-meta">{{ exercise.category }}</span>
+              <span class="exercise-meta">{{ exercise.tags.join(' · ') }}</span>
             </button>
           </div>
 
@@ -481,14 +493,6 @@ const handleAddWorkout = () => {
                   </div>
                 </div>
 
-                <label>
-                  {{ t.side }}
-                  <select v-model="exercise.side" @change="handleSideChange(exercise)">
-                    <option value="synchronized">{{ t.synchronized }}</option>
-                    <option value="single">{{ t.single }}</option>
-                  </select>
-                </label>
-
                 <p v-if="previousPerformance(exercise.exerciseId)" class="previous-performance">
                   {{ t.previousPerformance }}:
                   {{ previousPerformance(exercise.exerciseId)?.date }} ·
@@ -503,7 +507,7 @@ const handleAddWorkout = () => {
                       <label>
                         {{ t.weight }} (kg)
                         <input
-                          :value="`${round.weightKg} kg`"
+                          :value="roundWeightLabel(round)"
                           type="text"
                           readonly
                           class="weight-trigger"
@@ -542,6 +546,23 @@ const handleAddWorkout = () => {
                           @click="incrementReps(round)"
                         >
                           +
+                        </button>
+                        <button
+                          type="button"
+                          class="icon-button mode-toggle"
+                          :class="{ synchronized: round.side === 'both' }"
+                          :aria-label="round.side === 'both' ? t.roundSynchronized : t.roundSingle"
+                          :title="round.side === 'both' ? t.roundSynchronized : t.roundSingle"
+                          @click="toggleRoundMode(exercise, round)"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <circle cx="8" cy="6" r="2" />
+                            <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
+                            <g v-if="round.side === 'both'">
+                              <circle cx="16" cy="6" r="2" />
+                              <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
+                            </g>
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -588,9 +609,9 @@ const handleAddWorkout = () => {
             class="workout-item"
             role="button"
             tabindex="0"
-            @click="loadWorkout(workout)"
-            @keydown.enter="loadWorkout(workout)"
-            @keydown.space.prevent="loadWorkout(workout)"
+            @click="openWorkout(workout)"
+            @keydown.enter="openWorkout(workout)"
+            @keydown.space.prevent="openWorkout(workout)"
           >
             <div>
               <strong>{{ workout.title }}</strong>
@@ -635,10 +656,20 @@ const handleAddWorkout = () => {
               :key="weight"
               type="button"
               class="weight-preset"
-              :class="{ selected: weightDialogValue === weight }"
-              @click="weightDialogValue = weight"
+              :class="{ selected: weightDialogValue === weight && weightDialogCount === 1 }"
+              @click="weightDialogValue = weight; weightDialogCount = 1"
             >
               {{ weight }} kg
+            </button>
+            <button
+              v-for="weight in commonWeightsKg"
+              :key="`paired-${weight}`"
+              type="button"
+              class="weight-preset"
+              :class="{ selected: weightDialogValue === weight && weightDialogCount === 2 }"
+              @click="weightDialogValue = weight; weightDialogCount = 2"
+            >
+              2×{{ weight }}kg
             </button>
           </div>
 
@@ -689,11 +720,17 @@ p {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
   padding: 1.25rem 1.4rem;
 }
 
 .metric-card strong {
   font-size: 2rem;
+}
+
+.metric-card.active-goal strong {
+  font-size: clamp(1.25rem, 4vw, 2rem);
+  overflow-wrap: anywhere;
 }
 
 .metric-card.accent {
@@ -873,6 +910,30 @@ p {
   font-size: 1.25rem;
 }
 
+.mode-toggle {
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.45rem;
+  color: #475569;
+}
+
+.mode-toggle.synchronized {
+  border-color: #4f46e5;
+  background: #e0e7ff;
+  color: #312e81;
+}
+
+.mode-toggle svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
 .rep-count-input:focus {
   outline: 2px solid rgba(79, 70, 229, 0.35);
   outline-offset: 1px;
@@ -1007,7 +1068,7 @@ p {
 
 .dialog-presets {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
   gap: 0.5rem;
 }
 
@@ -1051,8 +1112,17 @@ p {
   }
 
   .round-row {
-    grid-template-columns: minmax(4.25rem, 0.65fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.45rem;
+  }
+
+  .round-row .reps-measurement {
+    grid-column: 1 / -1;
+  }
+
+  .round-row > .remove-button {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .counter-button {

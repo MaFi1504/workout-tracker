@@ -4,7 +4,7 @@ import type { Exercise, Workout } from '~/composables/useWorkoutStorage'
 
 const { settings, seedExercises, customExercises, workouts } = useWorkoutStorage()
 
-const selectedExerciseId = ref('front-raise')
+const selectedExerciseId = ref<'all' | string>('all')
 const rangeMode = ref<'all' | 'week' | 'month' | 'custom'>('all')
 const fromDate = ref('')
 const toDate = ref('')
@@ -12,8 +12,9 @@ const toDate = ref('')
 const translations = {
   en: {
     title: 'Progress analytics',
-    intro: 'Compare your recent work with previous sessions and choose your next challenge.',
+    intro: 'Review every workout, explore your activity pattern, and compare exercise progress.',
     exercise: 'Exercise',
+    allExercises: 'All exercises',
     range: 'Time range',
     allTime: 'All time',
     lastWeek: 'Last 7 days',
@@ -31,12 +32,18 @@ const translations = {
     noData: 'No recorded rounds match this filter yet.',
     kg: 'kg',
     reps: 'reps',
-    volume: 'kg volume'
+    volume: 'kg volume',
+    workoutHistory: 'Workout history',
+    workouts: 'workouts',
+    activity: 'Workout activity',
+    noWorkouts: 'No workouts match this time range.',
+    selectRange: 'Drag across days to select a time range.'
   },
   de: {
     title: 'Fortschrittsanalyse',
     intro: 'Vergleiche deine aktuellen Leistungen und plane die nächste Herausforderung.',
     exercise: 'Übung',
+    allExercises: 'Alle Übungen',
     range: 'Zeitraum',
     allTime: 'Gesamte Zeit',
     lastWeek: 'Letzte 7 Tage',
@@ -54,13 +61,20 @@ const translations = {
     noData: 'Für diesen Filter gibt es noch keine aufgezeichneten Runden.',
     kg: 'kg',
     reps: 'Wdh.',
-    volume: 'kg Volumen'
+    volume: 'kg Volumen',
+    workoutHistory: 'Trainingsverlauf',
+    workouts: 'Trainingseinheiten',
+    activity: 'Trainingsaktivität',
+    noWorkouts: 'Keine Trainings in diesem Zeitraum.',
+    selectRange: 'Ziehe über Tage, um einen Zeitraum auszuwählen.'
   }
 } as const
 
 const t = computed(() => translations[settings.value.language])
 const allExercises = computed(() => [...seedExercises.value, ...customExercises.value])
-const selectedExercise = computed<Exercise | undefined>(() => allExercises.value.find((exercise) => exercise.id === selectedExerciseId.value))
+const selectedExercise = computed<Exercise | undefined>(() => selectedExerciseId.value === 'all'
+  ? undefined
+  : allExercises.value.find((exercise) => exercise.id === selectedExerciseId.value))
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('de-DE', {
   day: '2-digit',
@@ -106,14 +120,14 @@ interface HistoryPoint {
 
 const history = computed<HistoryPoint[]>(() => workouts.value
   .flatMap((workout) => workout.exercises
-    .filter((exercise) => exercise.exerciseId === selectedExerciseId.value)
+    .filter((exercise) => selectedExerciseId.value === 'all' || exercise.exerciseId === selectedExerciseId.value)
     .flatMap((exercise) => exercise.rounds.map((round) => ({
       workout,
       date: workout.date,
       round: round.round,
       weightKg: round.weightKg,
       reps: round.reps,
-      volume: round.weightKg * round.reps
+      volume: round.weightKg * (round.weightCount || 1) * round.reps
     }))))
   .filter((point) => (!rangeStart.value || point.date >= rangeStart.value) && (!rangeEnd.value || point.date <= rangeEnd.value))
   .sort((left, right) => left.date.localeCompare(right.date) || left.round - right.round))
@@ -127,6 +141,110 @@ const maxReps = computed(() => Math.max(...history.value.map((point) => point.re
 const maxVolume = computed(() => Math.max(...history.value.map((point) => point.volume), 1))
 
 const barHeight = (value: number, max: number) => `${Math.max(6, (value / max) * 100)}%`
+
+const filteredWorkouts = computed(() => workouts.value
+  .filter((workout) => (!rangeStart.value || workout.date >= rangeStart.value) && (!rangeEnd.value || workout.date <= rangeEnd.value))
+  .sort((left, right) => right.date.localeCompare(left.date) || (right.createdAt || '').localeCompare(left.createdAt || '')))
+
+const localDateValue = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const heatmapWeeks = computed(() => {
+  const counts = new Map<string, number>()
+  workouts.value.forEach((workout) => counts.set(workout.date, (counts.get(workout.date) || 0) + 1))
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const end = new Date(today)
+  const dayOfWeek = end.getDay()
+  end.setDate(end.getDate() + (6 - dayOfWeek))
+  const start = new Date(end)
+  start.setDate(start.getDate() - 364)
+  start.setDate(start.getDate() - start.getDay())
+  const weeks: Array<Array<{ date: string; count: number }>> = []
+
+  for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 7)) {
+    const week = []
+    for (let day = 0; day < 7; day += 1) {
+      const date = new Date(cursor)
+      date.setDate(cursor.getDate() + day)
+      const iso = localDateValue(date)
+      const count = counts.get(iso) || 0
+      week.push({ date: iso, count, level: Math.min(count, 4), color: ['#eef2f7', '#bbf7d0', '#4ade80', '#16a34a', '#166534'][Math.min(count, 4)] })
+    }
+    weeks.push(week)
+  }
+
+  return weeks
+})
+
+const heatmapLabel = (cell: { date: string; count: number }) => `${formatDate(cell.date)}: ${cell.count} ${t.value.workouts}`
+const selectedHeatmapDate = ref<string | null>(null)
+const heatmapTooltipPosition = ref({ x: 0, y: 0 })
+const heatmapDragStart = ref<string | null>(null)
+const heatmapDragEnd = ref<string | null>(null)
+const isDraggingHeatmap = ref(false)
+const workoutsOnDate = (date: string) => workouts.value.filter((workout) => workout.date === date)
+const selectedHeatmapWorkouts = computed(() =>
+  selectedHeatmapDate.value ? workoutsOnDate(selectedHeatmapDate.value) : []
+)
+const monthLabel = (week: Array<{ date: string }>, weekIndex: number, weeks: Array<Array<{ date: string }>>) => {
+  const currentMonth = week[0]?.date.slice(0, 7)
+  const previousMonth = weeks[weekIndex - 1]?.[0]?.date.slice(0, 7)
+  if (!currentMonth || currentMonth === previousMonth) return ''
+
+  return new Intl.DateTimeFormat(settings.value.language === 'de' ? 'de-DE' : 'en-US', { month: 'short' })
+    .format(new Date(`${currentMonth}-01T00:00:00`))
+}
+
+const closeHeatmapTooltip = (date: string) => {
+  if (selectedHeatmapDate.value === date) selectedHeatmapDate.value = null
+}
+
+const isDateInHeatmapSelection = (date: string) => {
+  if (!heatmapDragStart.value || !heatmapDragEnd.value) return false
+  const start = heatmapDragStart.value < heatmapDragEnd.value ? heatmapDragStart.value : heatmapDragEnd.value
+  const end = heatmapDragStart.value < heatmapDragEnd.value ? heatmapDragEnd.value : heatmapDragStart.value
+  return date >= start && date <= end
+}
+
+const startHeatmapRange = (date: string, event: PointerEvent) => {
+  if (event.pointerType === 'mouse' && event.button !== 0) return
+  isDraggingHeatmap.value = true
+  heatmapDragStart.value = date
+  heatmapDragEnd.value = date
+  selectedHeatmapDate.value = null
+}
+
+const extendHeatmapRange = (date: string) => {
+  if (isDraggingHeatmap.value) heatmapDragEnd.value = date
+}
+
+const finishHeatmapRange = () => {
+  if (!isDraggingHeatmap.value || !heatmapDragStart.value || !heatmapDragEnd.value) return
+  const start = heatmapDragStart.value < heatmapDragEnd.value ? heatmapDragStart.value : heatmapDragEnd.value
+  const end = heatmapDragStart.value < heatmapDragEnd.value ? heatmapDragEnd.value : heatmapDragStart.value
+  fromDate.value = start
+  toDate.value = end
+  rangeMode.value = 'custom'
+  isDraggingHeatmap.value = false
+}
+
+const showHeatmapTooltip = (date: string, event: MouseEvent) => {
+  if (!date) return
+  selectedHeatmapDate.value = date
+  heatmapTooltipPosition.value = { x: event.clientX, y: event.clientY }
+}
+
+const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
+  const target = event.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  selectedHeatmapDate.value = date
+  heatmapTooltipPosition.value = { x: rect.left + rect.width / 2, y: rect.top }
+}
 </script>
 
 <template>
@@ -143,6 +261,7 @@ const barHeight = (value: number, max: number) => `${Math.max(6, (value / max) *
         <label>
           {{ t.exercise }}
           <select v-model="selectedExerciseId">
+            <option value="all">{{ t.allExercises }}</option>
             <option v-for="exercise in allExercises" :key="exercise.id" :value="exercise.id">
               {{ exercise.name }}
             </option>
@@ -165,6 +284,97 @@ const barHeight = (value: number, max: number) => `${Math.max(6, (value / max) *
           {{ t.to }}
           <input v-model="toDate" type="date" lang="de-DE" />
         </label>
+      </section>
+
+      <section class="panel heatmap-panel">
+        <div class="section-heading">
+          <div>
+            <h3>{{ t.activity }}</h3>
+            <p>{{ workouts.length }} {{ t.workouts }}</p>
+            <small>{{ t.selectRange }}</small>
+          </div>
+          <div class="heatmap-legend" aria-label="Workout frequency">
+            <span>Less</span><i class="heatmap-cell level-0" /><i class="heatmap-cell level-1" /><i class="heatmap-cell level-2" /><i class="heatmap-cell level-3" /><i class="heatmap-cell level-4" /><span>More</span>
+          </div>
+        </div>
+        <ClientOnly>
+          <div class="heatmap-scroll">
+            <div class="heatmap-with-labels">
+              <div class="weekday-labels" aria-hidden="true">
+                <span />
+                <span>Mon</span>
+                <span />
+                <span>Wed</span>
+                <span />
+                <span>Fri</span>
+                <span />
+              </div>
+            <div class="heatmap">
+              <div class="heatmap-week" v-for="(week, weekIndex) in heatmapWeeks" :key="weekIndex">
+                <span class="heatmap-month-label">{{ monthLabel(week, weekIndex, heatmapWeeks) }}</span>
+                <span
+                  v-for="cell in week"
+                  :key="`${cell.date}-${cell.count}`"
+                  class="heatmap-cell-wrapper"
+                  @mouseenter="showHeatmapTooltip(cell.date, $event)"
+                  @mouseleave="closeHeatmapTooltip(cell.date)"
+                  @pointerdown="startHeatmapRange(cell.date, $event)"
+                  @pointerenter="extendHeatmapRange(cell.date)"
+                  @pointerup="finishHeatmapRange"
+                >
+                  <button
+                    type="button"
+                    class="heatmap-cell"
+                    :class="[`level-${cell.level}`, { 'range-selected': isDateInHeatmapSelection(cell.date) }]"
+                    :style="{ backgroundColor: cell.color }"
+                    :aria-label="heatmapLabel(cell)"
+                    @focus="showHeatmapTooltipAtCell(cell.date, $event)"
+                    @blur="closeHeatmapTooltip(cell.date)"
+                    @click="selectedHeatmapDate === cell.date ? closeHeatmapTooltip(cell.date) : showHeatmapTooltipAtCell(cell.date, $event)"
+                  />
+                </span>
+              </div>
+            </div>
+            </div>
+          </div>
+        </ClientOnly>
+      </section>
+      <Teleport to="body">
+        <div
+          v-if="selectedHeatmapDate"
+          class="heatmap-tooltip heatmap-tooltip-overlay"
+          :style="{
+            left: `clamp(8rem, ${heatmapTooltipPosition.x}px, calc(100vw - 8rem))`,
+            top: `clamp(8rem, ${heatmapTooltipPosition.y}px, calc(100vh - 2rem))`
+          }"
+          role="status"
+        >
+          <strong>{{ formatDate(selectedHeatmapDate) }}</strong>
+          <span v-for="workout in selectedHeatmapWorkouts" :key="workout.id">{{ workout.title }}</span>
+        </div>
+      </Teleport>
+
+      <section class="panel workout-history">
+        <div class="section-heading">
+          <h3>{{ t.workoutHistory }}</h3>
+          <span>{{ filteredWorkouts.length }} {{ t.workouts }}</span>
+        </div>
+        <div v-if="filteredWorkouts.length" class="workout-history-list">
+          <button
+            v-for="workout in filteredWorkouts"
+            :key="workout.id"
+            type="button"
+            class="workout-history-item"
+            @click="navigateTo(`/workouts/${workout.id}`)"
+          >
+            <span>
+              <strong>{{ workout.title }}</strong>
+              <small>{{ formatDate(workout.date) }} · {{ workout.exercises.length }} {{ t.exercises }}</small>
+            </span>
+            <strong>{{ workout.exercises.reduce((total, exercise) => total + exercise.rounds.reduce((sum, round) => sum + round.weightKg * (round.weightCount || 1) * round.reps, 0), 0) }} {{ t.kg }}</strong>
+          </button>
+        </div>
+        <p v-else class="empty-analytics">{{ t.noWorkouts }}</p>
       </section>
 
       <p v-if="selectedExercise" class="selected-exercise-description">
@@ -259,6 +469,182 @@ const barHeight = (value: number, max: number) => `${Math.max(6, (value / max) *
 .empty-analytics p {
   margin: 0.4rem 0 0;
   color: #475569;
+}
+
+.heatmap-panel,
+.workout-history {
+  margin-top: 1.5rem;
+  padding: 1.1rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.section-heading h3,
+.section-heading p {
+  margin: 0;
+}
+
+.section-heading p,
+.section-heading > span {
+  color: #64748b;
+}
+
+.heatmap-scroll {
+  overflow-x: auto;
+  padding: 0 1rem 0.75rem 0.25rem;
+  margin-right: -0.25rem;
+  scrollbar-gutter: stable;
+}
+
+.heatmap {
+  display: flex;
+  gap: 0.25rem;
+  min-width: max-content;
+}
+
+.heatmap-with-labels {
+  display: flex;
+  min-width: max-content;
+}
+
+.weekday-labels {
+  display: grid;
+  grid-template-rows: 1.1rem repeat(7, 0.72rem);
+  gap: 0.25rem;
+  width: 2.2rem;
+  margin-right: 0.35rem;
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 0.72rem;
+  text-align: right;
+}
+
+.heatmap-week {
+  display: grid;
+  gap: 0.25rem;
+  grid-template-rows: 1.1rem repeat(7, 0.72rem);
+  position: relative;
+}
+
+.heatmap-month-label {
+  height: 1.1rem;
+  color: #475569;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.heatmap-cell-wrapper {
+  position: relative;
+  display: block;
+  width: 0.72rem;
+  height: 0.72rem;
+}
+
+.heatmap-cell {
+  display: block;
+  width: 0.72rem;
+  height: 0.72rem;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.heatmap-cell:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.heatmap-cell.range-selected {
+  outline: 2px solid #f59e0b;
+  outline-offset: 1px;
+}
+
+.heatmap-tooltip {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.9rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0f172a;
+  color: white;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+}
+
+.heatmap-tooltip-overlay {
+  position: fixed;
+  z-index: 1000;
+  margin-top: 0;
+  transform: translate(-50%, calc(-100% - 0.75rem));
+  pointer-events: none;
+}
+
+.heatmap-tooltip span {
+  color: #cbd5e1;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.heatmap-legend .heatmap-cell {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+.level-0 { background: #eef2f7; }
+.level-1 { background: #bbf7d0; }
+.level-2 { background: #4ade80; }
+.level-3 { background: #16a34a; }
+.level-4 { background: #166534; }
+
+.workout-history-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.workout-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  text-align: left;
+}
+
+.workout-history-item:hover,
+.workout-history-item:focus-visible {
+  background: #e0e7ff;
+  outline: 2px solid rgba(79, 70, 229, 0.25);
+}
+
+.workout-history-item span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.workout-history-item small {
+  color: #64748b;
 }
 
 .panel {
@@ -415,6 +801,10 @@ const barHeight = (value: number, max: number) => `${Math.max(6, (value / max) *
   .summary-grid,
   .charts-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analytics-filters {
+    padding-right: 1.5rem;
   }
 
   .chart-wide {

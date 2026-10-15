@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { EXERCISE_CATEGORIES } from '~/composables/useWorkoutStorage'
-import type { Exercise, ExerciseCategory } from '~/composables/useWorkoutStorage'
+import { EXERCISE_TAGS } from '~/composables/useWorkoutStorage'
+import type { Exercise } from '~/composables/useWorkoutStorage'
 
 const { settings, seedExercises, customExercises, addExercise, updateExercise } = useWorkoutStorage()
 
@@ -10,7 +10,7 @@ const selectedExerciseId = ref('')
 const editingExerciseId = ref<string | null>(null)
 const form = reactive({
   name: '',
-  category: 'General' as ExerciseCategory,
+  tags: ['General'] as string[],
   description: '',
   defaultWeightUnit: 'kg' as 'kg' | 'lb'
 })
@@ -26,13 +26,13 @@ const translations = {
     title: 'Exercise library',
     intro: 'Browse the catalog, read how each movement is performed, or create your own exercise.',
     search: 'Search exercises',
-    allCategories: 'All categories',
+    allTags: 'All tags',
     custom: 'Custom',
     catalog: 'Catalog',
     addExercise: 'Add exercise',
     editExercise: 'Edit exercise',
     exerciseName: 'Exercise name',
-    category: 'Category',
+    tags: 'Tags',
     description: 'How to perform it',
     unit: 'Default weight unit',
     save: 'Save exercise',
@@ -53,13 +53,13 @@ const translations = {
     title: 'Übungsbibliothek',
     intro: 'Durchsuche den Katalog, lies die Ausführung oder erstelle eine eigene Übung.',
     search: 'Übungen suchen',
-    allCategories: 'Alle Kategorien',
+    allTags: 'Alle Tags',
     custom: 'Eigene',
     catalog: 'Katalog',
     addExercise: 'Übung hinzufügen',
     editExercise: 'Übung bearbeiten',
     exerciseName: 'Übungsname',
-    category: 'Kategorie',
+    tags: 'Tags',
     description: 'Ausführung',
     unit: 'Standard-Gewichtseinheit',
     save: 'Übung speichern',
@@ -74,14 +74,14 @@ const translations = {
 
 const t = computed(() => translations[settings.value.language])
 const allExercises = computed(() => [...seedExercises.value, ...customExercises.value])
-const categoryFilter = ref<'all' | ExerciseCategory>('all')
+const tagFilter = ref<'all' | string>('all')
 const filteredExercises = computed(() => {
   const term = search.value.trim().toLowerCase()
 
   return allExercises.value.filter((exercise) => {
-    const matchesCategory = categoryFilter.value === 'all' || exercise.category === categoryFilter.value
-    const matchesSearch = !term || exercise.name.toLowerCase().includes(term) || exercise.category.toLowerCase().includes(term)
-    return matchesCategory && matchesSearch
+    const matchesTag = tagFilter.value === 'all' || exercise.tags.includes(tagFilter.value)
+    const matchesSearch = !term || exercise.name.toLowerCase().includes(term) || exercise.tags.some((tag) => tag.toLowerCase().includes(term))
+    return matchesTag && matchesSearch
   })
 })
 const selectedExercise = computed(() => allExercises.value.find((exercise) => exercise.id === selectedExerciseId.value))
@@ -96,7 +96,7 @@ const startAdd = () => {
   editingExerciseId.value = null
   selectedExerciseId.value = ''
   form.name = ''
-  form.category = 'General'
+  form.tags = ['General']
   form.description = ''
   form.defaultWeightUnit = 'kg'
 }
@@ -109,7 +109,7 @@ const startEdit = (exercise: Exercise) => {
   editingExerciseId.value = exercise.id
   selectedExerciseId.value = exercise.id
   form.name = exercise.name
-  form.category = exercise.category as ExerciseCategory
+  form.tags = [...exercise.tags]
   form.description = exercise.description
   form.defaultWeightUnit = exercise.defaultWeightUnit
 }
@@ -117,7 +117,7 @@ const startEdit = (exercise: Exercise) => {
 const cancelEdit = () => {
   editingExerciseId.value = null
   form.name = ''
-  form.category = 'General'
+  form.tags = ['General']
   form.description = ''
   form.defaultWeightUnit = 'kg'
 }
@@ -160,24 +160,24 @@ const saveExercise = () => {
 
           <input v-model="search" type="search" :placeholder="t.search" class="search-input" />
 
-          <div class="category-filter" role="group" :aria-label="t.category">
+          <div class="category-filter" role="group" :aria-label="t.tags">
             <button
               type="button"
               class="category-pill"
-              :class="{ selected: categoryFilter === 'all' }"
-              @click="categoryFilter = 'all'"
+              :class="{ selected: tagFilter === 'all' }"
+              @click="tagFilter = 'all'"
             >
-              {{ t.allCategories }}
+              {{ t.allTags }}
             </button>
             <button
-              v-for="category in EXERCISE_CATEGORIES"
-              :key="category"
+              v-for="tag in EXERCISE_TAGS"
+              :key="tag"
               type="button"
               class="category-pill"
-              :class="{ selected: categoryFilter === category }"
-              @click="categoryFilter = category"
+              :class="{ selected: tagFilter === tag }"
+              @click="tagFilter = tag"
             >
-              {{ category }}
+              {{ tag }}
             </button>
           </div>
 
@@ -192,7 +192,7 @@ const saveExercise = () => {
             >
               <span>
                 <strong>{{ exercise.name }}</strong>
-                <small>{{ exercise.category }}</small>
+                <small>{{ exercise.tags.join(' · ') }}</small>
               </span>
               <small v-if="exercise.isCustom" class="custom-label">{{ t.custom }}</small>
             </button>
@@ -211,7 +211,10 @@ const saveExercise = () => {
                   {{ t.editExercise }}
                 </button>
               </div>
-              <span class="category-label">{{ selectedExercise.category }}</span>
+              <span class="category-label">{{ selectedExercise.tags.join(' · ') }}</span>
+              <a v-if="selectedExercise.videoUrl" class="video-link" :href="selectedExercise.videoUrl" target="_blank" rel="noreferrer">
+                Watch source video
+              </a>
               <p class="exercise-description">{{ selectedExercise.description }}</p>
             </div>
             <p v-else class="empty-state">{{ t.selectExercise }}</p>
@@ -229,10 +232,13 @@ const saveExercise = () => {
                 <input v-model="form.name" type="text" required />
               </label>
               <label>
-                {{ t.category }}
-                <select v-model="form.category">
-                  <option v-for="category in EXERCISE_CATEGORIES" :key="category" :value="category">{{ category }}</option>
-                </select>
+                {{ t.tags }}
+                <div class="tag-options">
+                  <label v-for="tag in EXERCISE_TAGS" :key="tag" class="tag-option">
+                    <input v-model="form.tags" type="checkbox" :value="tag" />
+                    {{ tag }}
+                  </label>
+                </div>
               </label>
               <label>
                 {{ t.description }}
@@ -410,6 +416,32 @@ p {
 .exercise-description {
   color: #334155;
   line-height: 1.65;
+}
+
+.video-link {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: #4f46e5;
+  font-weight: 700;
+}
+
+.tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag-option {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.4rem !important;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #dfe7f5;
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
 }
 
 .exercise-form {

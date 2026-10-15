@@ -6,6 +6,9 @@ Visualize exercise performance over time so the user can understand trends and p
 ## Requirements
 - Show progress by day, week, month, and custom range.
 - Support filtering by exercise, workout title/type, and date range.
+- Show the complete workout logbook with a custom inclusive date range.
+- Show a GitHub-style one-year workout activity heatmap with daily intensity levels.
+- Keep the overview limited to the five most recent workouts.
 - Aggregate round entries by exercise across different parent workouts.
 - Chart working weight, reps per round, total reps, and volume across time.
 - Highlight latest performance, previous performance, best performance, and recent trend changes.

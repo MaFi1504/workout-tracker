@@ -1,25 +1,31 @@
+import { playlistExercises } from '~/data/exerciseCatalog'
+
 export type WorkoutLanguage = 'en' | 'de'
 
 export interface Exercise {
   id: string
   name: string
-  category: string
+  tags: string[]
+  aliases?: string[]
   defaultWeightUnit: 'kg' | 'lb'
   isCustom: boolean
   description: string
+  videoUrl?: string
 }
 
-export const EXERCISE_CATEGORIES = [
+export const EXERCISE_TAGS = [
   'Shoulders',
   'Chest',
   'Legs',
   'Back',
   'Arms',
+  'Abs',
+  'Glutes',
   'Cardio',
   'General'
 ] as const
 
-export type ExerciseCategory = typeof EXERCISE_CATEGORIES[number]
+export type ExerciseTag = typeof EXERCISE_TAGS[number]
 
 export type WorkoutSide = 'single' | 'synchronized'
 
@@ -27,6 +33,7 @@ export interface RoundEntry {
   id: string
   round: number
   weightKg: number
+  weightCount?: 1 | 2
   reps: number
   side?: 'left' | 'right' | 'both'
 }
@@ -63,33 +70,17 @@ const STORAGE_KEYS = {
 
 const baseExercises: Exercise[] = [
   {
-    id: 'front-raise',
-    name: 'Front Raise',
-    category: 'Shoulders',
-    defaultWeightUnit: 'kg',
-    isCustom: false,
-    description: 'Stand tall with light weights at your sides. Raise both arms forward to shoulder height, then lower them slowly without swinging.'
-  },
-  {
     id: 'push-up',
     name: 'Push Up',
-    category: 'Chest',
+    tags: ['Chest'],
     defaultWeightUnit: 'kg',
     isCustom: false,
     description: 'Start in a high plank with hands under your shoulders. Lower your chest with a straight body, then press the floor away to return to the top.'
   },
   {
-    id: 'lat-raise',
-    name: 'Lat Raise',
-    category: 'Shoulders',
-    defaultWeightUnit: 'kg',
-    isCustom: false,
-    description: 'Stand with weights by your sides. Lift your arms out to shoulder height with soft elbows, pause briefly, and lower them under control.'
-  },
-  {
     id: 'bench-press',
     name: 'Bench Press',
-    category: 'Chest',
+    tags: ['Chest'],
     defaultWeightUnit: 'kg',
     isCustom: false,
     description: 'Lie on the bench with feet grounded and the bar over your chest. Lower it to mid-chest with control, then press it up while keeping your wrists stacked.'
@@ -97,7 +88,7 @@ const baseExercises: Exercise[] = [
   {
     id: 'squat',
     name: 'Squat',
-    category: 'Legs',
+    tags: ['Legs'],
     defaultWeightUnit: 'kg',
     isCustom: false,
     description: 'Set your feet about shoulder-width apart. Sit your hips down and back with a braced torso, then drive through your feet to stand tall.'
@@ -105,11 +96,16 @@ const baseExercises: Exercise[] = [
   {
     id: 'deadlift',
     name: 'Deadlift',
-    category: 'Back',
+    tags: ['Back'],
     defaultWeightUnit: 'kg',
     isCustom: false,
     description: 'Stand with the bar over your mid-foot. Hinge at the hips with a neutral back, grip the bar, and stand by driving your feet into the floor.'
-  }
+  },
+  ...playlistExercises.map((exercise) => ({
+    ...exercise,
+    defaultWeightUnit: 'kg' as const,
+    isCustom: false
+  }))
 ]
 
 const readStorage = <T>(key: string, fallback: T): T => {
@@ -190,10 +186,33 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'custom-exercise'
 
-const normalizeCategory = (value: string): ExerciseCategory =>
-  EXERCISE_CATEGORIES.includes(value.trim() as ExerciseCategory)
-    ? value.trim() as ExerciseCategory
-    : 'General'
+const normalizeTags = (value: unknown, legacyCategory?: unknown): string[] => {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : typeof legacyCategory === 'string' ? [legacyCategory] : []
+  const tags = values
+    .filter((tag): tag is string => typeof tag === 'string')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .filter((tag, index, all) => all.indexOf(tag) === index)
+
+  return tags.length ? tags : ['General']
+}
+
+const normalizeExercise = (value: unknown): Exercise | null => {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Partial<Exercise> & { category?: string }
+  if (typeof item.id !== 'string' || typeof item.name !== 'string') return null
+
+  return {
+    id: item.id,
+    name: item.name,
+    tags: normalizeTags(item.tags, item.category),
+    ...(Array.isArray(item.aliases) ? { aliases: item.aliases.filter((alias): alias is string => typeof alias === 'string') } : {}),
+    defaultWeightUnit: item.defaultWeightUnit === 'lb' ? 'lb' : 'kg',
+    isCustom: item.isCustom === true,
+    description: typeof item.description === 'string' ? item.description : '',
+    ...(typeof item.videoUrl === 'string' ? { videoUrl: item.videoUrl } : {})
+  }
+}
 
 // Tracks whether the client has already re-read localStorage after SSR hydration.
 let hasHydratedFromStorage = false
@@ -202,7 +221,10 @@ export const useWorkoutStorage = () => {
   const seedExercises = useState<Exercise[]>('seed-exercises', () => baseExercises)
   const customExercises = useState<Exercise[]>(
     'custom-exercises',
-    () => readStorage(STORAGE_KEYS.customExercises, [])
+    () => (Array.isArray(readStorage<unknown>(STORAGE_KEYS.customExercises, [])) ? readStorage<unknown>(STORAGE_KEYS.customExercises, []) : []).flatMap((item) => {
+      const exercise = normalizeExercise(item)
+      return exercise ? [exercise] : []
+    })
   )
   const storedWorkouts = readStorage<unknown>(STORAGE_KEYS.workouts, null)
   const workouts = useState<Workout[]>(
@@ -220,7 +242,11 @@ export const useWorkoutStorage = () => {
     // re-read localStorage itself once hydration has handed over the SSR payload.
     if (!hasHydratedFromStorage) {
       hasHydratedFromStorage = true
-      customExercises.value = readStorage(STORAGE_KEYS.customExercises, customExercises.value)
+      const storedCustomExercises = readStorage<unknown>(STORAGE_KEYS.customExercises, customExercises.value)
+      customExercises.value = (Array.isArray(storedCustomExercises) ? storedCustomExercises : []).flatMap((item) => {
+        const exercise = normalizeExercise(item)
+        return exercise ? [exercise] : []
+      })
       workouts.value = normalizeWorkouts(
         readStorage<unknown>(STORAGE_KEYS.workouts, null) ?? readStorage(STORAGE_KEYS.legacyWorkouts, workouts.value)
       )
@@ -252,7 +278,7 @@ export const useWorkoutStorage = () => {
     settings.value = { ...settings.value, language }
   }
 
-  const addExercise = (input: { name: string; category: string; description: string; defaultWeightUnit: 'kg' | 'lb' }) => {
+  const addExercise = (input: { name: string; tags: string[]; description: string; defaultWeightUnit: 'kg' | 'lb' }) => {
     const name = input.name.trim()
 
     if (!name) {
@@ -262,7 +288,7 @@ export const useWorkoutStorage = () => {
     const exercise: Exercise = {
       id: `${slugify(name)}-${Date.now()}`,
       name,
-      category: normalizeCategory(input.category),
+      tags: normalizeTags(input.tags),
       defaultWeightUnit: input.defaultWeightUnit || 'kg',
       isCustom: true,
       description: input.description.trim() || 'Custom exercise added by the user.'
@@ -280,7 +306,7 @@ export const useWorkoutStorage = () => {
     return exercise
   }
 
-  const updateExercise = (id: string, input: { name: string; category: string; description: string; defaultWeightUnit: 'kg' | 'lb' }) => {
+  const updateExercise = (id: string, input: { name: string; tags: string[]; description: string; defaultWeightUnit: 'kg' | 'lb' }) => {
     const name = input.name.trim()
     const index = customExercises.value.findIndex((exercise) => exercise.id === id)
 
@@ -305,7 +331,7 @@ export const useWorkoutStorage = () => {
     const updatedExercise: Exercise = {
       ...existingExercise,
       name,
-      category: normalizeCategory(input.category),
+      tags: normalizeTags(input.tags),
       description: input.description.trim() || 'Custom exercise added by the user.',
       defaultWeightUnit: input.defaultWeightUnit || 'kg'
     }
@@ -325,6 +351,23 @@ export const useWorkoutStorage = () => {
     return nextWorkout
   }
 
+  const updateWorkout = (id: string, workout: Partial<Omit<Workout, 'id'>>) => {
+    const index = workouts.value.findIndex((item) => item.id === id)
+    if (index < 0) return null
+
+    const existing = workouts.value[index]
+    if (!existing) return null
+
+    const updatedWorkout: Workout = {
+      ...existing,
+      ...workout,
+      id: existing.id,
+      createdAt: existing.createdAt
+    }
+    workouts.value[index] = updatedWorkout
+    return updatedWorkout
+  }
+
   return {
     seedExercises,
     customExercises,
@@ -333,6 +376,7 @@ export const useWorkoutStorage = () => {
     setLanguage,
     addExercise,
     updateExercise,
-    addWorkout
+    addWorkout,
+    updateWorkout
   }
 }
