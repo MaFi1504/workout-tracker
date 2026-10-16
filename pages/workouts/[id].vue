@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { exerciseVolume, roundVolume, workoutVolume } from '~/domain/workout-domain'
-import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
+import { computed, ref } from 'vue'
+import { exerciseVolume, workoutVolume } from '~/domain/workout-domain'
+import type { RoundEntry, Workout } from '~/composables/useWorkoutStorage'
 
 const route = useRoute()
-const { settings, workouts, seedExercises, customExercises, updateWorkout } = useWorkoutStorage()
+const { settings, workouts, seedExercises, customExercises, updateWorkout, deleteWorkout } = useWorkoutStorage()
 const workout = computed(() => workouts.value.find((item) => item.id === route.params.id))
 const draft = ref<Workout | null>(null)
 const editing = ref(false)
+const commonWeightsKg = [1, 3, 5, 8, 10] as const
+const weightDialogOpen = ref(false)
+const weightDialogRound = ref<RoundEntry | null>(null)
+const weightDialogValue = ref(0)
+const weightDialogCount = ref<1 | 2>(1)
+const returnPath = computed(() => route.query.from === 'analytics' ? '/analytics' : '/')
 
 const translations = {
-  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', notFound: 'Workout not found.', saved: 'Changes saved.' },
-  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.' }
+  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', delete: 'Delete workout', confirmDelete: 'Are you sure you want to delete this workout?', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', notFound: 'Workout not found.', saved: 'Changes saved.', weightDialog: 'Select weight', currentWeight: 'Current weight', quickWeights: 'Quick weights', apply: 'Apply weight' },
+  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', delete: 'Training löschen', confirmDelete: 'Möchtest du dieses Training wirklich löschen?', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.', weightDialog: 'Gewicht auswählen', currentWeight: 'Aktuelles Gewicht', quickWeights: 'Schnellgewichte', apply: 'Gewicht übernehmen' }
 } as const
 const t = computed(() => translations[settings.value.language])
 const availableExercises = computed(() => [...seedExercises.value, ...customExercises.value])
@@ -45,17 +51,51 @@ const save = () => {
   editing.value = false
   draft.value = null
 }
-const roundLabel = (round: RoundEntry) => `${round.weightKg} kg × ${round.reps}`
+const remove = async () => {
+  if (!workout.value || !window.confirm(t.value.confirmDelete)) return
+  if (deleteWorkout(workout.value.id)) {
+    await navigateTo(returnPath.value)
+  }
+}
+const roundLabel = (round: RoundEntry) => `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg × ${round.reps}`
+const openWeightDialog = (round: RoundEntry) => {
+  weightDialogRound.value = round
+  weightDialogValue.value = round.weightKg
+  weightDialogCount.value = round.weightCount || 1
+  weightDialogOpen.value = true
+}
+const closeWeightDialog = () => {
+  weightDialogOpen.value = false
+  weightDialogRound.value = null
+}
+const applyWeightDialog = () => {
+  const round = weightDialogRound.value
+  if (round && draft.value) {
+    const exercise = draft.value.exercises.find((item) => item.rounds.includes(round))
+    const roundIndex = exercise?.rounds.indexOf(round) ?? -1
+    if (exercise && roundIndex >= 0) {
+      const selectedRound = exercise.rounds[roundIndex]
+      if (selectedRound) {
+        selectedRound.weightKg = Math.max(0, Number(weightDialogValue.value) || 0)
+        selectedRound.weightCount = weightDialogCount.value
+      }
+    }
+  }
+  closeWeightDialog()
+}
 </script>
 
 <template>
   <div class="workout-detail-page">
-    <AppHeader active-page="overview" />
+    <AppHeader :active-page="returnPath === '/analytics' ? 'analytics' : 'overview'" />
     <main class="content">
       <div v-if="current" class="detail-shell">
         <div class="page-header">
-          <button type="button" class="secondary-button" @click="navigateTo('/')">← {{ t.back }}</button>
-          <button v-if="!editing" type="button" class="primary-button" @click="startEdit">{{ t.edit }}</button>
+          <button type="button" class="secondary-button" @click="navigateTo(returnPath)">← {{ t.back }}</button>
+          <div v-if="!editing" class="header-actions">
+            <button type="button" class="danger-button" @click="remove">{{ t.delete }}</button>
+            <button type="button" class="primary-button" @click="startEdit">{{ t.edit }}</button>
+          </div>
           <div v-else class="header-actions">
             <button type="button" class="secondary-button" @click="cancelEdit">{{ t.cancel }}</button>
             <button type="button" class="primary-button" @click="save">{{ t.save }}</button>
@@ -93,7 +133,7 @@ const roundLabel = (round: RoundEntry) => `${round.weightKg} kg × ${round.reps}
                 <div v-for="round in exercise.rounds" :key="round.id" class="round-row">
                   <span>{{ round.round }}.</span>
                   <template v-if="editing">
-                    <input v-model.number="round.weightKg" type="number" min="0" step="0.5" :aria-label="t.weight" />
+                    <input :value="`${round.weightCount === 2 ? '2×' : ''}${round.weightKg}`" type="text" readonly class="weight-trigger" :aria-label="t.weightDialog" @click="openWeightDialog(round)" @keydown.enter="openWeightDialog(round)" />
                     <span>kg ×</span>
                     <input v-model.number="round.reps" type="number" min="0" step="1" :aria-label="t.reps" />
                     <span>{{ t.reps }}</span>
@@ -108,6 +148,24 @@ const roundLabel = (round: RoundEntry) => `${round.weightKg} kg × ${round.reps}
         <section class="panel notes-panel">
           <label>{{ t.notes }}<textarea v-if="editing" v-model="draft!.notes" rows="4" /><p v-else>{{ current.notes || '—' }}</p></label>
         </section>
+
+        <div v-if="weightDialogOpen" class="weight-dialog-backdrop" role="presentation" @click.self="closeWeightDialog">
+          <section class="weight-dialog" role="dialog" aria-modal="true" :aria-label="t.weightDialog">
+            <div class="panel-header">
+              <h2>{{ t.weightDialog }}</h2>
+              <button type="button" class="icon-button" :aria-label="t.cancel" :title="t.cancel" @click="closeWeightDialog">×</button>
+            </div>
+            <label>{{ t.currentWeight }} (kg)<input v-model.number="weightDialogValue" type="number" min="0" step="0.5" autofocus /></label>
+            <div class="dialog-presets" :aria-label="t.quickWeights">
+              <button v-for="weight in commonWeightsKg" :key="weight" type="button" class="weight-preset" :class="{ selected: weightDialogValue === weight && weightDialogCount === 1 }" @click="weightDialogValue = weight; weightDialogCount = 1">{{ weight }} kg</button>
+              <button v-for="weight in commonWeightsKg" :key="`paired-${weight}`" type="button" class="weight-preset" :class="{ selected: weightDialogValue === weight && weightDialogCount === 2 }" @click="weightDialogValue = weight; weightDialogCount = 2">2×{{ weight }}kg</button>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="secondary-button" @click="closeWeightDialog">{{ t.cancel }}</button>
+              <button type="button" class="primary-button" @click="applyWeightDialog">{{ t.apply }}</button>
+            </div>
+          </section>
+        </div>
       </div>
       <section v-else class="panel empty-state">{{ t.notFound }}</section>
     </main>
@@ -134,8 +192,16 @@ const roundLabel = (round: RoundEntry) => `${round.weightKg} kg × ${round.reps}
 .round-row { display: flex; align-items: center; gap: .5rem; color: #475569; }
 .round-row input, .heading-panel input, .notes-panel textarea { padding: .55rem .65rem; border: 1px solid #dfe7f5; border-radius: 9px; background: white; }
 .round-row input { width: 5rem; }
+.weight-trigger { cursor: pointer; background: #eef2ff; color: #312e81; font-weight: 600; }
 .heading-panel label, .notes-panel label { display: grid; gap: .35rem; color: #334155; font-weight: 600; }
 .notes-panel textarea { resize: vertical; font: inherit; }
 .empty-state { color: #64748b; }
+.weight-dialog-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 1rem; background: rgba(15, 23, 42, .45); }
+.weight-dialog { display: grid; gap: 1rem; width: min(100%, 28rem); padding: 1.25rem; border: 1px solid rgba(148, 163, 184, .2); border-radius: 20px; background: white; box-shadow: 0 24px 70px rgba(15, 23, 42, .25); }
+.weight-dialog label { display: grid; gap: .35rem; color: #334155; font-weight: 600; }
+.dialog-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); gap: .5rem; }
+.weight-preset { min-height: 2.75rem; padding: .25rem .45rem; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; cursor: pointer; }
+.weight-preset.selected { border-color: #4f46e5; background: #eef2ff; color: #312e81; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: .6rem; }
 @media (max-width: 700px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } .page-header { align-items: flex-start; } }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { updateRoundWeight } from '~/domain/workout-domain'
 import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
 
 const { settings, customExercises, workouts, seedExercises, addWorkout } = useWorkoutStorage()
@@ -193,9 +194,20 @@ const closeWeightDialog = () => {
 }
 
 const applyWeightDialog = () => {
-  if (weightDialogRound.value) {
-    weightDialogRound.value.weightKg = Math.max(0, Number(weightDialogValue.value) || 0)
-    weightDialogRound.value.weightCount = weightDialogCount.value
+  const round = weightDialogRound.value
+  if (round) {
+    const exercise = draftExercises.value.find((item) => item.rounds.includes(round))
+    const roundIndex = exercise?.rounds.indexOf(round) ?? -1
+    const weightKg = Math.max(0, Number(weightDialogValue.value) || 0)
+
+    if (exercise && roundIndex >= 0) {
+      const updatedRounds = updateRoundWeight(exercise.rounds, roundIndex, weightKg, weightDialogCount.value)
+      exercise.rounds = updatedRounds
+      exercise.rounds[roundIndex]!.weightCount = weightDialogCount.value
+    } else {
+      round.weightKg = weightKg
+      round.weightCount = weightDialogCount.value
+    }
   }
 
   closeWeightDialog()
@@ -250,7 +262,7 @@ const loadWorkout = (workout: Workout) => {
   selectedExerciseId.value = draftExercises.value[0]?.exerciseId || selectedExerciseId.value
 }
 
-const openWorkout = (workout: Workout) => navigateTo(`/workouts/${workout.id}`)
+const openWorkout = (workout: Workout) => navigateTo(`/workouts/${workout.id}?from=overview`)
 
 const previousPerformance = (exerciseId: string) => {
   const match = workouts.value

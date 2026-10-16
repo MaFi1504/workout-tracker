@@ -9,6 +9,10 @@ export const removeRep = (reps: number) => Math.max(0, reps - 1)
 export const roundVolume = (round: RoundEntry) => round.weightKg * (round.weightCount || 1) * round.reps
 export const exerciseVolume = (exercise: WorkoutExercise) => exercise.rounds.reduce((total, round) => total + roundVolume(round), 0)
 export const workoutVolume = (workout: Workout) => workout.exercises.reduce((total, exercise) => total + exerciseVolume(exercise), 0)
+export const updateRoundWeight = (rounds: RoundEntry[], roundIndex: number, weightKg: number, weightCount?: 1 | 2) =>
+  rounds.map((round, index) => index === roundIndex || (roundIndex === 0 && index > roundIndex)
+    ? { ...round, weightKg, ...(weightCount === undefined ? {} : { weightCount }) }
+    : round)
 
 export const validateWorkout = (workout: Omit<Workout, 'id'> | Workout) => {
   if (!workout.date || !workout.title.trim() || !workout.exercises.length) return false

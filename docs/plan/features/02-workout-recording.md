@@ -45,13 +45,15 @@ interface RoundEntry {
 3. User chooses the round count and movement side type for each exercise.
 4. While following the workout, user records the weight and reps for each completed round.
 5. User can view the previous performance for the selected exercise without leaving the active workout.
-6. The parent workout, its exercises, and all round entries are saved to local storage.
+6. Changing the first-round weight copies it, including its 2× factor, to all following rounds for that exercise.
+7. The parent workout, its exercises, and all round entries are saved to local storage.
 
 ## Acceptance criteria
 - A workout can include multiple exercises and rounds.
 - The stored shape has one parent workout with nested workout exercises and round entries.
 - A round preserves its own weight and reps instead of only storing an exercise total.
 - Logged values remain editable after creation.
+- Saved workouts can be deleted after confirmation.
 - Workouts can be filtered by date, title/type, and exercise.
 - Exercise analytics can aggregate round entries across all parent workouts.
 

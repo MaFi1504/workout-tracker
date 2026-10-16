@@ -368,6 +368,14 @@ export const useWorkoutStorage = () => {
     return updatedWorkout
   }
 
+  const deleteWorkout = (id: string) => {
+    const existing = workouts.value.some((item) => item.id === id)
+    if (!existing) return false
+
+    workouts.value = workouts.value.filter((item) => item.id !== id)
+    return true
+  }
+
   return {
     seedExercises,
     customExercises,
@@ -377,6 +385,7 @@ export const useWorkoutStorage = () => {
     addExercise,
     updateExercise,
     addWorkout,
-    updateWorkout
+    updateWorkout,
+    deleteWorkout
   }
 }

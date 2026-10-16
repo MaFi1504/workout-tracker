@@ -26,15 +26,18 @@ const translations = {
     previous: 'Previous',
     bestWeight: 'Best weight',
     bestReps: 'Best reps',
-    weightTrend: 'Weight per round',
-    repsTrend: 'Reps per round',
-    volumeTrend: 'Volume per round',
+    weightTrend: 'Best weight over time',
+    repsTrend: 'Total reps per workout',
+    volumeTrend: 'Volume per workout',
+    roundsTrend: 'Rounds per workout',
+    averageReps: 'Average reps per exercise',
     noData: 'No recorded rounds match this filter yet.',
     kg: 'kg',
     reps: 'reps',
     volume: 'kg volume',
     workoutHistory: 'Workout history',
     workouts: 'workouts',
+    rounds: 'rounds',
     activity: 'Workout activity',
     noWorkouts: 'No workouts match this time range.',
     selectRange: 'Drag across days to select a time range.'
@@ -55,15 +58,18 @@ const translations = {
     previous: 'Vorherige',
     bestWeight: 'Bestes Gewicht',
     bestReps: 'Beste Wiederholungen',
-    weightTrend: 'Gewicht pro Runde',
-    repsTrend: 'Wiederholungen pro Runde',
-    volumeTrend: 'Volumen pro Runde',
+    weightTrend: 'Bestes Gewicht im Zeitverlauf',
+    repsTrend: 'Wiederholungen pro Training',
+    volumeTrend: 'Volumen pro Training',
+    roundsTrend: 'Runden pro Training',
+    averageReps: 'Durchschnittliche Wdh. pro Übung',
     noData: 'Für diesen Filter gibt es noch keine aufgezeichneten Runden.',
     kg: 'kg',
     reps: 'Wdh.',
     volume: 'kg Volumen',
     workoutHistory: 'Trainingsverlauf',
     workouts: 'Trainingseinheiten',
+    rounds: 'Runden',
     activity: 'Trainingsaktivität',
     noWorkouts: 'Keine Trainings in diesem Zeitraum.',
     selectRange: 'Ziehe über Tage, um einen Zeitraum auszuwählen.'
@@ -136,15 +142,68 @@ const latest = computed(() => history.value.at(-1))
 const previous = computed(() => history.value.at(-2))
 const bestWeight = computed(() => history.value.reduce((best, point) => Math.max(best, point.weightKg), 0))
 const bestReps = computed(() => history.value.reduce((best, point) => Math.max(best, point.reps), 0))
-const maxWeight = computed(() => Math.max(...history.value.map((point) => point.weightKg), 1))
-const maxReps = computed(() => Math.max(...history.value.map((point) => point.reps), 1))
-const maxVolume = computed(() => Math.max(...history.value.map((point) => point.volume), 1))
-
-const barHeight = (value: number, max: number) => `${Math.max(6, (value / max) * 100)}%`
-
 const filteredWorkouts = computed(() => workouts.value
   .filter((workout) => (!rangeStart.value || workout.date >= rangeStart.value) && (!rangeEnd.value || workout.date <= rangeEnd.value))
   .sort((left, right) => right.date.localeCompare(left.date) || (right.createdAt || '').localeCompare(left.createdAt || '')))
+
+interface WorkoutMetric {
+  workout: Workout
+  date: string
+  volume: number
+  rounds: number
+  reps: number
+  averageReps: number
+  bestWeight: number
+}
+
+const workoutMetrics = computed<WorkoutMetric[]>(() => filteredWorkouts.value
+  .map((workout) => {
+    const exercises = workout.exercises.filter((exercise) =>
+      selectedExerciseId.value === 'all' || exercise.exerciseId === selectedExerciseId.value
+    )
+    const rounds = exercises.flatMap((exercise) => exercise.rounds)
+    const reps = rounds.reduce((total, round) => total + round.reps, 0)
+
+    return {
+      workout,
+      date: workout.date,
+      volume: rounds.reduce((total, round) => total + round.weightKg * (round.weightCount || 1) * round.reps, 0),
+      rounds: rounds.length,
+      reps,
+      averageReps: exercises.length ? reps / exercises.length : 0,
+      bestWeight: rounds.reduce((best, round) => Math.max(best, round.weightKg), 0)
+    }
+  })
+  .filter((metric) => metric.rounds > 0)
+  .sort((left, right) => left.date.localeCompare(right.date) || (left.workout.createdAt || '').localeCompare(right.workout.createdAt || '')))
+
+const maxMetric = (key: keyof Pick<WorkoutMetric, 'volume' | 'rounds' | 'reps' | 'averageReps' | 'bestWeight'>) =>
+  Math.max(...workoutMetrics.value.map((metric) => metric[key]), 1)
+
+const chartPlot = { left: 52, right: 632, top: 20, bottom: 190 }
+type ChartMetric = keyof Pick<WorkoutMetric, 'volume' | 'rounds' | 'reps' | 'averageReps' | 'bestWeight'>
+
+const chartY = (value: number, key: ChartMetric) =>
+  chartPlot.bottom - (value / maxMetric(key)) * (chartPlot.bottom - chartPlot.top)
+
+const chartPoints = (key: keyof Pick<WorkoutMetric, 'volume' | 'rounds' | 'reps' | 'averageReps' | 'bestWeight'>) => {
+  const metrics = workoutMetrics.value
+  const step = metrics.length > 1 ? (chartPlot.right - chartPlot.left) / (metrics.length - 1) : 0
+
+  return metrics.map((metric, index) => {
+    const x = metrics.length === 1 ? (chartPlot.left + chartPlot.right) / 2 : chartPlot.left + index * step
+    const y = chartY(Number(metric[key]), key)
+    return `${x},${y}`
+  }).join(' ')
+}
+
+const chartTicks = (key: ChartMetric) => [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
+  value: maxMetric(key) * ratio,
+  y: chartY(maxMetric(key) * ratio, key)
+}))
+
+const chartValue = (value: number, key: ChartMetric) =>
+  key === 'averageReps' ? value.toFixed(1) : Math.round(value).toString()
 
 const localDateValue = (date: Date) => {
   const year = date.getFullYear()
@@ -365,7 +424,7 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
             :key="workout.id"
             type="button"
             class="workout-history-item"
-            @click="navigateTo(`/workouts/${workout.id}`)"
+            @click="navigateTo(`/workouts/${workout.id}?from=analytics`)"
           >
             <span>
               <strong>{{ workout.title }}</strong>
@@ -405,32 +464,83 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
       <section v-if="history.length" class="charts-grid">
         <article class="chart-panel panel">
           <h3>{{ t.weightTrend }}</h3>
-          <div class="bar-chart" aria-label="Weight trend chart">
-            <div v-for="point in history" :key="`${point.workout.id}-${point.round}-weight`" class="bar-column">
-              <strong class="bar-value">{{ point.weightKg }}</strong>
-              <div class="bar-track"><span class="bar weight-bar" :style="{ height: barHeight(point.weightKg, maxWeight) }" /></div>
-              <small>{{ formatDate(point.date) }}</small>
-            </div>
+          <div class="line-chart" role="img" :aria-label="t.weightTrend">
+            <svg viewBox="0 0 640 220" preserveAspectRatio="none">
+              <g class="chart-axis">
+                <line x1="52" y1="20" x2="52" y2="190" />
+                <template v-for="tick in chartTicks('bestWeight')" :key="`weight-tick-${tick.value}`">
+                  <line x1="52" :y1="tick.y" x2="632" :y2="tick.y" class="chart-grid-line" />
+                  <text x="46" :y="tick.y + 4" text-anchor="end">{{ chartValue(tick.value, 'bestWeight') }}</text>
+                </template>
+              </g>
+              <polyline :points="chartPoints('bestWeight')" class="chart-line weight-line" />
+              <circle v-for="(metric, index) in workoutMetrics" :key="`${metric.workout.id}-weight`" :cx="workoutMetrics.length === 1 ? 342 : 52 + index * (580 / (workoutMetrics.length - 1))" :cy="chartY(metric.bestWeight, 'bestWeight')" r="4" class="chart-point weight-point" />
+            </svg>
+            <div class="chart-labels"><small v-for="metric in workoutMetrics" :key="`${metric.workout.id}-weight-label`">{{ formatDate(metric.date) }}</small></div>
           </div>
         </article>
         <article class="chart-panel panel">
           <h3>{{ t.repsTrend }}</h3>
-          <div class="bar-chart" aria-label="Reps trend chart">
-            <div v-for="point in history" :key="`${point.workout.id}-${point.round}-reps`" class="bar-column">
-              <strong class="bar-value">{{ point.reps }}</strong>
-              <div class="bar-track"><span class="bar reps-bar" :style="{ height: barHeight(point.reps, maxReps) }" /></div>
-              <small>{{ formatDate(point.date) }}</small>
-            </div>
+          <div class="line-chart" role="img" :aria-label="t.repsTrend">
+            <svg viewBox="0 0 640 220" preserveAspectRatio="none">
+              <g class="chart-axis">
+                <line x1="52" y1="20" x2="52" y2="190" />
+                <template v-for="tick in chartTicks('reps')" :key="`reps-tick-${tick.value}`">
+                  <line x1="52" :y1="tick.y" x2="632" :y2="tick.y" class="chart-grid-line" />
+                  <text x="46" :y="tick.y + 4" text-anchor="end">{{ chartValue(tick.value, 'reps') }}</text>
+                </template>
+              </g>
+              <polyline :points="chartPoints('reps')" class="chart-line reps-line" />
+            </svg>
+            <div class="chart-labels"><small v-for="metric in workoutMetrics" :key="`${metric.workout.id}-reps-label`">{{ formatDate(metric.date) }}</small></div>
           </div>
         </article>
         <article class="chart-panel panel chart-wide">
           <h3>{{ t.volumeTrend }}</h3>
-          <div class="bar-chart" aria-label="Volume trend chart">
-            <div v-for="point in history" :key="`${point.workout.id}-${point.round}-volume`" class="bar-column">
-              <strong class="bar-value">{{ point.volume }}</strong>
-              <div class="bar-track"><span class="bar volume-bar" :style="{ height: barHeight(point.volume, maxVolume) }" /></div>
-              <small>{{ formatDate(point.date) }}</small>
-            </div>
+          <div class="line-chart" role="img" :aria-label="t.volumeTrend">
+            <svg viewBox="0 0 640 220" preserveAspectRatio="none">
+              <g class="chart-axis">
+                <line x1="52" y1="20" x2="52" y2="190" />
+                <template v-for="tick in chartTicks('volume')" :key="`volume-tick-${tick.value}`">
+                  <line x1="52" :y1="tick.y" x2="632" :y2="tick.y" class="chart-grid-line" />
+                  <text x="46" :y="tick.y + 4" text-anchor="end">{{ chartValue(tick.value, 'volume') }}</text>
+                </template>
+              </g>
+              <polyline :points="chartPoints('volume')" class="chart-line volume-line" />
+            </svg>
+            <div class="chart-labels"><small v-for="metric in workoutMetrics" :key="`${metric.workout.id}-volume-label`">{{ formatDate(metric.date) }}</small></div>
+          </div>
+        </article>
+        <article class="chart-panel panel chart-wide">
+          <h3>{{ t.roundsTrend }}</h3>
+          <div class="line-chart" role="img" :aria-label="t.roundsTrend">
+            <svg viewBox="0 0 640 220" preserveAspectRatio="none">
+              <g class="chart-axis">
+                <line x1="52" y1="20" x2="52" y2="190" />
+                <template v-for="tick in chartTicks('rounds')" :key="`rounds-tick-${tick.value}`">
+                  <line x1="52" :y1="tick.y" x2="632" :y2="tick.y" class="chart-grid-line" />
+                  <text x="46" :y="tick.y + 4" text-anchor="end">{{ chartValue(tick.value, 'rounds') }}</text>
+                </template>
+              </g>
+              <polyline :points="chartPoints('rounds')" class="chart-line rounds-line" />
+            </svg>
+            <div class="chart-labels"><small v-for="metric in workoutMetrics" :key="`${metric.workout.id}-rounds-label`">{{ formatDate(metric.date) }}</small></div>
+          </div>
+        </article>
+        <article class="chart-panel panel chart-wide">
+          <h3>{{ t.averageReps }}</h3>
+          <div class="line-chart" role="img" :aria-label="t.averageReps">
+            <svg viewBox="0 0 640 220" preserveAspectRatio="none">
+              <g class="chart-axis">
+                <line x1="52" y1="20" x2="52" y2="190" />
+                <template v-for="tick in chartTicks('averageReps')" :key="`average-tick-${tick.value}`">
+                  <line x1="52" :y1="tick.y" x2="632" :y2="tick.y" class="chart-grid-line" />
+                  <text x="46" :y="tick.y + 4" text-anchor="end">{{ chartValue(tick.value, 'averageReps') }}</text>
+                </template>
+              </g>
+              <polyline :points="chartPoints('averageReps')" class="chart-line average-line" />
+            </svg>
+            <div class="chart-labels"><small v-for="metric in workoutMetrics" :key="`${metric.workout.id}-average-label`">{{ formatDate(metric.date) }}</small></div>
           </div>
         </article>
       </section>
@@ -736,6 +846,66 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
   min-height: 14rem;
   overflow-x: auto;
   padding: 1rem 0 0.25rem;
+}
+
+.line-chart {
+  overflow: hidden;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.line-chart svg {
+  display: block;
+  width: 100%;
+  height: 14rem;
+  overflow: hidden;
+  background: linear-gradient(to bottom, transparent 49.5%, #e2e8f0 50%, transparent 50.5%);
+}
+
+.chart-axis line {
+  stroke: #94a3b8;
+  stroke-width: 1;
+}
+
+.chart-axis text {
+  fill: #64748b;
+  font-size: 13px;
+}
+
+.chart-grid-line {
+  stroke: #e2e8f0 !important;
+  stroke-dasharray: 4 4;
+}
+
+.chart-line {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.weight-line { stroke: #4f46e5; }
+.reps-line { stroke: #0f766e; }
+.volume-line { stroke: #ea580c; }
+.rounds-line { stroke: #2563eb; }
+.average-line { stroke: #9333ea; }
+.chart-point { stroke: white; stroke-width: 2; }
+.weight-point { fill: #4f46e5; }
+
+.chart-labels {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.chart-labels small {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .bar-column {
