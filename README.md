@@ -3,7 +3,7 @@
 
 A local-first Nuxt app for recording workouts, managing exercises, and tracking training volume. Workout entries, custom exercises, and language preferences are stored in the browser.
 
-The app is configured as a Progressive Web App (PWA). In production, it can be installed from a compatible browser and its application assets are cached for offline startup.
+The app is configured as a Progressive Web App (PWA). It provides Android-sized app icons and a service worker that caches the application shell for offline startup. The development server also enables the PWA for testing. Browsers require HTTPS for installation and service workers, except on `localhost`; use an HTTPS deployment to install it on another device.
 
 ## Development
 

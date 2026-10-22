@@ -310,6 +310,9 @@ const addSelectedExercise = () => {
       ? cloneRounds(exercise.id, previousExercise.rounds)
       : createRounds(exercise.id, 10)
   })
+
+  selectedExerciseId.value = ''
+  search.value = ''
 }
 
 const removeDraftExercise = (draftId: string) => {
