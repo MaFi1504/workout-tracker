@@ -7,6 +7,8 @@ export const kgToLb = (weightKg: number) => weightKg / KG_PER_LB
 export const lbToKg = (weightLb: number) => weightLb * KG_PER_LB
 export const addRep = (reps: number) => Math.max(0, reps) + 1
 export const removeRep = (reps: number) => Math.max(0, reps - 1)
+export const nextRoundSide = (side: RoundEntry['side'] = 'both'): NonNullable<RoundEntry['side']> =>
+  side === 'both' ? 'left' : side === 'left' ? 'right' : 'both'
 export const roundVolume = (round: RoundEntry, unit: ExerciseMeasurementUnit = 'reps') =>
   unit === 'seconds' ? 0 : round.weightKg * (round.weightCount || 1) * round.reps
 export const exerciseVolume = (exercise: WorkoutExercise, unit: ExerciseMeasurementUnit = 'reps') =>

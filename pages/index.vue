@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { updateRoundWeight, workoutVolume } from '~/domain/workout-domain'
+import { nextRoundSide, updateRoundWeight, workoutVolume } from '~/domain/workout-domain'
 import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
 
 const { settings, customExercises, workouts, seedExercises, replaceSeedExercises, addWorkout, isTimedExercise, measurementLabel } = useWorkoutStorage()
@@ -10,6 +10,8 @@ const router = useRouter()
 const search = ref('')
 const selectedExerciseId = ref('front-raise')
 const draftExercises = ref<WorkoutExercise[]>([])
+const activeInfoExerciseId = ref<string | null>(null)
+const hoveredInfoExerciseId = ref<string | null>(null)
 const form = reactive({
   date: new Date().toISOString().slice(0, 10),
   title: 'Lower Body workout',
@@ -71,6 +73,10 @@ const translations = {
     decreaseSecond: 'Remove one second',
     roundSynchronized: 'Synchronized round',
     roundSingle: 'Single-sided round',
+    sideBoth: 'Both sides',
+    sideLeft: 'Left side',
+    sideRight: 'Right side',
+    exerciseInfo: 'Exercise description',
     save: 'Save workout',
     englishLabel: 'English'
   },
@@ -122,6 +128,10 @@ const translations = {
     decreaseSecond: 'Eine Sekunde entfernen',
     roundSynchronized: 'Synchrone Runde',
     roundSingle: 'Einseitige Runde',
+    sideBoth: 'Beide Seiten',
+    sideLeft: 'Linke Seite',
+    sideRight: 'Rechte Seite',
+    exerciseInfo: 'Übungsbeschreibung',
     save: 'Training speichern',
     englishLabel: 'Deutsch'
   }
@@ -225,8 +235,19 @@ const normalizeReps = (round: RoundEntry) => {
 }
 
 const toggleRoundMode = (exercise: WorkoutExercise, round: RoundEntry) => {
-  round.side = round.side === 'both' ? 'left' : 'both'
-  exercise.side = exercise.rounds.every((item) => item.side === 'both') ? 'synchronized' : 'single'
+  round.side = nextRoundSide(round.side)
+  exercise.side = exercise.rounds.every((item) => (item.side || 'both') === 'both') ? 'synchronized' : 'single'
+}
+
+const exerciseDescription = (exerciseId: string) =>
+  availableExercises.value.find((exercise) => exercise.id === exerciseId)?.description || ''
+
+const showExerciseInfo = (exerciseId: string) =>
+  activeInfoExerciseId.value === exerciseId || hoveredInfoExerciseId.value === exerciseId
+
+const sideLabel = (round: RoundEntry) => {
+  const side = round.side || 'both'
+  return side === 'both' ? t.value.sideBoth : side === 'left' ? t.value.sideLeft : t.value.sideRight
 }
 
 const latestWorkoutExercise = (exerciseId: string) => workouts.value
@@ -477,7 +498,31 @@ const handleAddWorkout = () => {
               <article v-for="exercise in draftExercises" :key="exercise.id" class="draft-exercise">
                 <div class="draft-exercise-header">
                   <div class="draft-exercise-title">
-                    <strong>{{ exerciseName(exercise.exerciseId) }}</strong>
+                    <div class="exercise-name-with-info">
+                      <strong>{{ exerciseName(exercise.exerciseId) }}</strong>
+                      <span
+                        class="exercise-info-wrap"
+                        @mouseenter="hoveredInfoExerciseId = exercise.exerciseId"
+                        @mouseleave="hoveredInfoExerciseId = null"
+                      >
+                        <button
+                          type="button"
+                          class="exercise-info-button"
+                          :aria-label="t.exerciseInfo"
+                          :aria-expanded="showExerciseInfo(exercise.exerciseId)"
+                          :aria-describedby="showExerciseInfo(exercise.exerciseId) ? `exercise-description-${exercise.id}` : undefined"
+                          @click.stop="activeInfoExerciseId = activeInfoExerciseId === exercise.exerciseId ? null : exercise.exerciseId"
+                          @focus="hoveredInfoExerciseId = exercise.exerciseId"
+                          @blur="hoveredInfoExerciseId = null"
+                        >i</button>
+                        <span
+                          v-if="showExerciseInfo(exercise.exerciseId)"
+                          :id="`exercise-description-${exercise.id}`"
+                          class="exercise-info-tooltip"
+                          role="tooltip"
+                        >{{ exerciseDescription(exercise.exerciseId) }}</span>
+                      </span>
+                    </div>
                     <span>{{ t.rounds }}: {{ exercise.rounds.length }}</span>
                   </div>
                   <div class="draft-exercise-actions">
@@ -572,15 +617,23 @@ const handleAddWorkout = () => {
                         <button
                           type="button"
                           class="icon-button mode-toggle"
-                          :class="{ synchronized: round.side === 'both' }"
-                          :aria-label="round.side === 'both' ? t.roundSynchronized : t.roundSingle"
-                          :title="round.side === 'both' ? t.roundSynchronized : t.roundSingle"
+                          :class="[`side-${round.side || 'both'}`, { synchronized: (round.side || 'both') === 'both' }]"
+                          :aria-label="sideLabel(round)"
+                          :title="sideLabel(round)"
                           @click="toggleRoundMode(exercise, round)"
                         >
                           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                            <circle cx="8" cy="6" r="2" />
-                            <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
-                            <g v-if="round.side === 'both'">
+                            <g v-if="(round.side || 'both') === 'left'">
+                              <circle cx="8" cy="6" r="2" />
+                              <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
+                            </g>
+                            <g v-else-if="round.side === 'right'">
+                              <circle cx="16" cy="6" r="2" />
+                              <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
+                            </g>
+                            <g v-else>
+                              <circle cx="8" cy="6" r="2" />
+                              <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
                               <circle cx="16" cy="6" r="2" />
                               <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
                             </g>
@@ -831,6 +884,54 @@ p {
 .round-row label {
   display: grid;
   gap: 0.25rem;
+}
+
+.exercise-name-with-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.exercise-info-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.exercise-info-button {
+  display: inline-grid;
+  width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #94a3b8;
+  border-radius: 50%;
+  background: #fff;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
+.exercise-info-button:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.exercise-info-tooltip {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  width: min(18rem, calc(100vw - 4rem));
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: #1e293b;
+  color: #fff !important;
+  font-size: 0.8rem !important;
+  font-weight: 400;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgb(15 23 42 / 20%);
 }
 
 .draft-exercise-header span {
