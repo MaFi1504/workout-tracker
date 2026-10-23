@@ -1,6 +1,7 @@
 import { playlistExercises } from '~/data/exerciseCatalog'
+import type { Exercise } from '~/composables/useWorkoutStorage'
 
-const exerciseSeed = [
+const exerciseSeed: Exercise[] = [
   {
     id: 'push-up',
     name: 'Push Up',
@@ -40,4 +41,7 @@ const exerciseSeed = [
   }))
 ]
 
-export default defineEventHandler(() => exerciseSeed)
+export default defineEventHandler(() => exerciseSeed.map((exercise) => ({
+  ...exercise,
+  measurementUnit: exercise.measurementUnit || 'reps'
+})))

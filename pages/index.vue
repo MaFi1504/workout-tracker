@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { updateRoundWeight } from '~/domain/workout-domain'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { updateRoundWeight, workoutVolume } from '~/domain/workout-domain'
 import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
 
-const { settings, customExercises, workouts, seedExercises, addWorkout } = useWorkoutStorage()
+const { settings, customExercises, workouts, seedExercises, replaceSeedExercises, addWorkout, isTimedExercise, measurementLabel } = useWorkoutStorage()
+const route = useRoute()
+const router = useRouter()
 
 const search = ref('')
 const selectedExerciseId = ref('front-raise')
@@ -37,6 +39,7 @@ const translations = {
     activeGoal: 'Focus',
     recentSessions: 'Recent sessions',
     loadWorkout: 'Load as new workout',
+    viewWorkout: 'View details',
     noWorkouts: 'No workouts logged yet.',
     logWorkout: 'Log workout',
     chooseExercise: 'Choose an exercise',
@@ -64,6 +67,8 @@ const translations = {
     cancel: 'Cancel',
     increaseRep: 'Count one rep',
     decreaseRep: 'Remove one rep',
+    increaseSecond: 'Add one second',
+    decreaseSecond: 'Remove one second',
     roundSynchronized: 'Synchronized round',
     roundSingle: 'Single-sided round',
     save: 'Save workout',
@@ -85,6 +90,7 @@ const translations = {
     activeGoal: 'Fokus',
     recentSessions: 'Letzte Einheiten',
     loadWorkout: 'Als neues Training laden',
+    viewWorkout: 'Details ansehen',
     noWorkouts: 'Noch keine Trainingseinheiten gespeichert.',
     logWorkout: 'Training loggen',
     chooseExercise: 'Übung wählen',
@@ -112,6 +118,8 @@ const translations = {
     cancel: 'Abbrechen',
     increaseRep: 'Eine Wiederholung zählen',
     decreaseRep: 'Eine Wiederholung entfernen',
+    increaseSecond: 'Eine Sekunde hinzufügen',
+    decreaseSecond: 'Eine Sekunde entfernen',
     roundSynchronized: 'Synchrone Runde',
     roundSingle: 'Einseitige Runde',
     save: 'Training speichern',
@@ -135,23 +143,14 @@ const filteredExercises = computed(() => {
 })
 
 const totalVolume = computed(() =>
-  workouts.value.reduce(
-    (workoutTotal, workout) => workoutTotal + workout.exercises.reduce(
-      (exerciseTotal, exercise) => exerciseTotal + exercise.rounds.reduce(
-        (roundTotal, round) => roundTotal + round.weightKg * (round.weightCount || 1) * round.reps,
-        0
-      ),
-      0
-    ),
-    0
-  )
+  workouts.value.reduce((total, workout) => total + workoutVolume(workout, availableExercises.value), 0)
 )
 
 const exerciseName = (exerciseId: string) =>
   availableExercises.value.find((exercise) => exercise.id === exerciseId)?.name || exerciseId
 
 const roundSummary = (exercise: WorkoutExercise) =>
-  exercise.rounds.map((round) => `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg x ${round.reps}`).join(' · ')
+  exercise.rounds.map((round) => `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg x ${round.reps} ${measurementLabel(exercise.exerciseId)}`).join(' · ')
 
 const roundWeightLabel = (round: RoundEntry) =>
   `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg`
@@ -236,7 +235,7 @@ const latestWorkoutExercise = (exerciseId: string) => workouts.value
     .map((exercise) => ({ workout, exercise })))
   .sort((left, right) => right.workout.date.localeCompare(left.workout.date))[0]?.exercise
 
-const cloneRounds = (exerciseId: string, rounds: WorkoutExercise['rounds'], stamp = Date.now()) =>
+const cloneRounds = (exerciseId: string, rounds: WorkoutExercise['rounds'], stamp: string | number = Date.now()) =>
   rounds.map((round, roundIndex) => ({
     ...round,
     id: `draft-${exerciseId}-round-${stamp}-${roundIndex}`,
@@ -263,6 +262,14 @@ const loadWorkout = (workout: Workout) => {
 }
 
 const openWorkout = (workout: Workout) => navigateTo(`/workouts/${workout.id}?from=overview`)
+
+watch(() => route.query.loadWorkout, (id) => {
+  if (typeof id !== 'string') return
+  const workout = workouts.value.find((item) => item.id === id)
+  if (workout) loadWorkout(workout)
+  const { loadWorkout: _loadWorkout, ...query } = route.query
+  void router.replace({ path: route.path, query })
+}, { immediate: true })
 
 const previousPerformance = (exerciseId: string) => {
   const match = workouts.value
@@ -362,7 +369,7 @@ onMounted(async () => {
   if (!seedExercises.value.length) {
     const response = await fetch('/api/exercises')
     const payload = await response.json()
-    seedExercises.value = payload
+    replaceSeedExercises(payload)
   }
 
 })
@@ -533,13 +540,13 @@ const handleAddWorkout = () => {
                       </label>
                     </div>
                     <div class="round-measurement reps-measurement">
-                      <span class="measurement-label">{{ t.reps }}</span>
+                      <span class="measurement-label">{{ measurementLabel(exercise.exerciseId) }}</span>
                       <div class="rep-controls">
                         <button
                           type="button"
                           class="icon-button counter-button"
-                          :aria-label="t.decreaseRep"
-                          :title="t.decreaseRep"
+                          :aria-label="isTimedExercise(exercise.exerciseId) ? t.decreaseSecond : t.decreaseRep"
+                          :title="isTimedExercise(exercise.exerciseId) ? t.decreaseSecond : t.decreaseRep"
                           @click="decrementReps(round)"
                         >
                           −
@@ -550,14 +557,14 @@ const handleAddWorkout = () => {
                           inputmode="numeric"
                           pattern="[0-9]*"
                           class="rep-count-input"
-                          :aria-label="t.reps"
+                          :aria-label="measurementLabel(exercise.exerciseId)"
                           @change="normalizeReps(round)"
                         />
                         <button
                           type="button"
                           class="icon-button counter-button"
-                          :aria-label="t.increaseRep"
-                          :title="t.increaseRep"
+                          :aria-label="isTimedExercise(exercise.exerciseId) ? t.increaseSecond : t.increaseRep"
+                          :title="isTimedExercise(exercise.exerciseId) ? t.increaseSecond : t.increaseRep"
                           @click="incrementReps(round)"
                         >
                           +
@@ -622,11 +629,6 @@ const handleAddWorkout = () => {
             v-for="workout in workouts.slice(0, 5)"
             :key="workout.id"
             class="workout-item"
-            role="button"
-            tabindex="0"
-            @click="openWorkout(workout)"
-            @keydown.enter="openWorkout(workout)"
-            @keydown.space.prevent="openWorkout(workout)"
           >
             <div>
               <strong>{{ workout.title }}</strong>
@@ -637,7 +639,10 @@ const handleAddWorkout = () => {
                 {{ exerciseName(exercise.exerciseId) }}: {{ roundSummary(exercise) }}
               </span>
             </div>
-            <span class="workout-load-label">{{ t.loadWorkout }}</span>
+            <div class="workout-actions">
+              <button type="button" class="text-button" @click="openWorkout(workout)">{{ t.viewWorkout }}</button>
+              <button type="button" class="workout-load-label" @click="loadWorkout(workout)">{{ t.loadWorkout }}</button>
+            </div>
           </article>
         </div>
 
@@ -1030,13 +1035,11 @@ p {
   border: 1px solid transparent;
   border-radius: 16px;
   background: #f8fafc;
-  cursor: pointer;
   text-align: left;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.workout-item:hover,
-.workout-item:focus-visible {
+.workout-item:hover {
   border-color: #a5b4fc;
   background: #eef2ff;
   outline: none;
@@ -1054,10 +1057,20 @@ p {
 
 .workout-load-label {
   align-self: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #4f46e5;
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.workout-actions {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.75rem !important;
 }
 
 .weight-dialog-backdrop {

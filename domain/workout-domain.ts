@@ -1,4 +1,5 @@
-import type { RoundEntry, Workout, WorkoutExercise } from './composables/useWorkoutStorage'
+import type { Exercise, RoundEntry, Workout, WorkoutExercise } from '../composables/useWorkoutStorage'
+import type { ExerciseMeasurementUnit } from '../data/exerciseCatalog'
 
 export const COMMON_WEIGHTS_KG = [1, 3, 5, 8, 10] as const
 export const KG_PER_LB = 0.45359237
@@ -6,9 +7,12 @@ export const kgToLb = (weightKg: number) => weightKg / KG_PER_LB
 export const lbToKg = (weightLb: number) => weightLb * KG_PER_LB
 export const addRep = (reps: number) => Math.max(0, reps) + 1
 export const removeRep = (reps: number) => Math.max(0, reps - 1)
-export const roundVolume = (round: RoundEntry) => round.weightKg * (round.weightCount || 1) * round.reps
-export const exerciseVolume = (exercise: WorkoutExercise) => exercise.rounds.reduce((total, round) => total + roundVolume(round), 0)
-export const workoutVolume = (workout: Workout) => workout.exercises.reduce((total, exercise) => total + exerciseVolume(exercise), 0)
+export const roundVolume = (round: RoundEntry, unit: ExerciseMeasurementUnit = 'reps') =>
+  unit === 'seconds' ? 0 : round.weightKg * (round.weightCount || 1) * round.reps
+export const exerciseVolume = (exercise: WorkoutExercise, unit: ExerciseMeasurementUnit = 'reps') =>
+  unit === 'seconds' ? 0 : exercise.rounds.reduce((total, round) => total + roundVolume(round), 0)
+export const workoutVolume = (workout: Workout, catalog: Pick<Exercise, 'id' | 'measurementUnit'>[] = []) =>
+  workout.exercises.reduce((total, exercise) => total + exerciseVolume(exercise, catalog.find((item) => item.id === exercise.exerciseId)?.measurementUnit), 0)
 export const updateRoundWeight = (rounds: RoundEntry[], roundIndex: number, weightKg: number, weightCount?: 1 | 2) =>
   rounds.map((round, index) => index === roundIndex || (roundIndex === 0 && index > roundIndex)
     ? { ...round, weightKg, ...(weightCount === undefined ? {} : { weightCount }) }
@@ -20,9 +24,9 @@ export const validateWorkout = (workout: Omit<Workout, 'id'> | Workout) => {
 }
 
 export interface ExerciseHistoryPoint { workoutId: string; date: string; round: number; weightKg: number; reps: number; volume: number; side?: RoundEntry['side'] }
-export const exerciseHistory = (workouts: Workout[], exerciseId: string): ExerciseHistoryPoint[] => workouts.flatMap((workout) => {
+export const exerciseHistory = (workouts: Workout[], exerciseId: string, unit: ExerciseMeasurementUnit = 'reps'): ExerciseHistoryPoint[] => workouts.flatMap((workout) => {
   const exercise = workout.exercises.find((item) => item.exerciseId === exerciseId)
-  return exercise ? exercise.rounds.map((round) => ({ workoutId: workout.id, date: workout.date, round: round.round, weightKg: round.weightKg, reps: round.reps, volume: roundVolume(round), side: round.side })) : []
+  return exercise ? exercise.rounds.map((round) => ({ workoutId: workout.id, date: workout.date, round: round.round, weightKg: round.weightKg, reps: round.reps, volume: roundVolume(round, unit), side: round.side })) : []
 }).sort((left, right) => left.date.localeCompare(right.date) || left.round - right.round)
 
 export const filterWorkouts = (workouts: Workout[], filters: { exerciseId?: string; title?: string; from?: string; to?: string }) => {
