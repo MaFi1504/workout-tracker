@@ -5,9 +5,10 @@ export default defineNuxtConfig({
   app: {
     head: {
       link: [
+        { rel: 'manifest', href: '/manifest.webmanifest' },
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
-        { rel: 'apple-touch-icon', href: '/favicon.svg' }
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }
       ],
       meta: [
         { name: 'theme-color', content: '#4f46e5' },
@@ -18,6 +19,10 @@ export default defineNuxtConfig({
   },
   pwa: {
     registerType: 'autoUpdate',
+    devOptions: {
+      enabled: true
+    },
+    includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png'],
     manifest: {
       name: 'Workout Tracker',
       short_name: 'Workout Tracker',
@@ -29,10 +34,37 @@ export default defineNuxtConfig({
       scope: '/',
       icons: [
         {
-          src: '/favicon.svg',
-          sizes: 'any',
-          type: 'image/svg+xml',
-          purpose: 'any maskable'
+          src: '/pwa-192x192.png',
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any'
+        },
+        {
+          src: '/pwa-512x512.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any'
+        },
+        {
+          src: '/pwa-512x512.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'maskable'
+        }
+      ],
+      screenshots: [
+        {
+          src: '/pwa-mobile.png',
+          sizes: '390x844',
+          type: 'image/png',
+          label: 'Workout Tracker on mobile'
+        },
+        {
+          src: '/pwa-desktop.jpg',
+          sizes: '1280x800',
+          type: 'image/jpeg',
+          form_factor: 'wide',
+          label: 'Workout Tracker on desktop'
         }
       ]
     },
