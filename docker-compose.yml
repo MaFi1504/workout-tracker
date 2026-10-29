@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: workout-tracker:latest
+    image: ghcr.io/mafi1504/workout-tracker:${WORKOUT_TRACKER_TAG:-latest}
     restart: unless-stopped
     init: true
     environment:
