@@ -2,8 +2,9 @@
 import { computed, reactive, ref } from 'vue'
 import { EXERCISE_TAGS } from '~/composables/useWorkoutStorage'
 import type { Exercise } from '~/composables/useWorkoutStorage'
+import type { ExerciseMeasurementUnit } from '~/data/exerciseCatalog'
 
-const { settings, seedExercises, customExercises, addExercise, updateExercise } = useWorkoutStorage()
+const { settings, seedExercises, customExercises, addExercise, updateExercise, setExerciseMeasurementUnit } = useWorkoutStorage()
 
 const search = ref('')
 const selectedExerciseId = ref('')
@@ -12,7 +13,8 @@ const form = reactive({
   name: '',
   tags: ['General'] as string[],
   description: '',
-  defaultWeightUnit: 'kg' as 'kg' | 'lb'
+  defaultWeightUnit: 'kg' as 'kg' | 'lb',
+  measurementUnit: 'reps' as ExerciseMeasurementUnit
 })
 
 const translations = {
@@ -35,6 +37,9 @@ const translations = {
     tags: 'Tags',
     description: 'How to perform it',
     unit: 'Default weight unit',
+    measurementUnit: 'Measurement unit',
+    reps: 'Reps',
+    seconds: 'Time (seconds)',
     save: 'Save exercise',
     cancel: 'Cancel',
     selectExercise: 'Select an exercise to read its description.',
@@ -62,6 +67,9 @@ const translations = {
     tags: 'Tags',
     description: 'Ausführung',
     unit: 'Standard-Gewichtseinheit',
+    measurementUnit: 'Maßeinheit',
+    reps: 'Wiederholungen',
+    seconds: 'Zeit (Sekunden)',
     save: 'Übung speichern',
     cancel: 'Abbrechen',
     selectExercise: 'Wähle eine Übung, um ihre Beschreibung zu lesen.',
@@ -99,6 +107,7 @@ const startAdd = () => {
   form.tags = ['General']
   form.description = ''
   form.defaultWeightUnit = 'kg'
+  form.measurementUnit = 'reps'
 }
 
 const startEdit = (exercise: Exercise) => {
@@ -112,6 +121,7 @@ const startEdit = (exercise: Exercise) => {
   form.tags = [...exercise.tags]
   form.description = exercise.description
   form.defaultWeightUnit = exercise.defaultWeightUnit
+  form.measurementUnit = exercise.measurementUnit || 'reps'
 }
 
 const cancelEdit = () => {
@@ -120,6 +130,7 @@ const cancelEdit = () => {
   form.tags = ['General']
   form.description = ''
   form.defaultWeightUnit = 'kg'
+  form.measurementUnit = 'reps'
 }
 
 const saveExercise = () => {
@@ -212,6 +223,16 @@ const saveExercise = () => {
                 </button>
               </div>
               <span class="category-label">{{ selectedExercise.tags.join(' · ') }}</span>
+              <label class="measurement-setting">
+                {{ t.measurementUnit }}
+                <select
+                  :value="selectedExercise.measurementUnit || 'reps'"
+                  @change="setExerciseMeasurementUnit(selectedExercise.id, ($event.target as HTMLSelectElement).value as ExerciseMeasurementUnit)"
+                >
+                  <option value="reps">{{ t.reps }}</option>
+                  <option value="seconds">{{ t.seconds }}</option>
+                </select>
+              </label>
               <a v-if="selectedExercise.videoUrl" class="video-link" :href="selectedExercise.videoUrl" target="_blank" rel="noreferrer">
                 Watch source video
               </a>
@@ -249,6 +270,13 @@ const saveExercise = () => {
                 <select v-model="form.defaultWeightUnit">
                   <option value="kg">kg</option>
                   <option value="lb">lb</option>
+                </select>
+              </label>
+              <label>
+                {{ t.measurementUnit }}
+                <select v-model="form.measurementUnit">
+                  <option value="reps">{{ t.reps }}</option>
+                  <option value="seconds">{{ t.seconds }}</option>
                 </select>
               </label>
               <button type="submit" class="primary-button">{{ t.save }}</button>
@@ -449,12 +477,17 @@ p {
   gap: 0.9rem;
 }
 
-.exercise-form label {
+.exercise-form label,
+.measurement-setting {
   display: grid;
   gap: 0.35rem;
   color: #334155;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.measurement-setting {
+  margin-bottom: 1rem;
 }
 
 .empty-state {

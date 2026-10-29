@@ -1,4 +1,5 @@
-import { playlistExercises } from '~/data/exerciseCatalog'
+import { playlistExercises } from '../data/exerciseCatalog'
+import type { ExerciseMeasurementUnit } from '../data/exerciseCatalog'
 
 export type WorkoutLanguage = 'en' | 'de'
 
@@ -8,6 +9,7 @@ export interface Exercise {
   tags: string[]
   aliases?: string[]
   defaultWeightUnit: 'kg' | 'lb'
+  measurementUnit?: ExerciseMeasurementUnit
   isCustom: boolean
   description: string
   videoUrl?: string
@@ -34,6 +36,7 @@ export interface RoundEntry {
   round: number
   weightKg: number
   weightCount?: 1 | 2
+  // Repetitions or seconds, according to the exercise's measurement unit.
   reps: number
   side?: 'left' | 'right' | 'both'
 }
@@ -65,7 +68,8 @@ const STORAGE_KEYS = {
   customExercises: 'workout:custom-exercises',
   workouts: 'workout:sessions',
   legacyWorkouts: 'workout:entries',
-  settings: 'workout:settings'
+  settings: 'workout:settings',
+  exerciseUnits: 'workout:exercise-units'
 } as const
 
 const baseExercises: Exercise[] = [
@@ -208,6 +212,7 @@ const normalizeExercise = (value: unknown): Exercise | null => {
     tags: normalizeTags(item.tags, item.category),
     ...(Array.isArray(item.aliases) ? { aliases: item.aliases.filter((alias): alias is string => typeof alias === 'string') } : {}),
     defaultWeightUnit: item.defaultWeightUnit === 'lb' ? 'lb' : 'kg',
+    measurementUnit: item.measurementUnit === 'seconds' ? 'seconds' : 'reps',
     isCustom: item.isCustom === true,
     description: typeof item.description === 'string' ? item.description : '',
     ...(typeof item.videoUrl === 'string' ? { videoUrl: item.videoUrl } : {})
@@ -236,6 +241,10 @@ export const useWorkoutStorage = () => {
   const settings = useState<WorkoutSettings>('workout-settings', () => ({
     language: readStorage<WorkoutSettings>(STORAGE_KEYS.settings, { language: 'en' }).language || 'en'
   }))
+  const exerciseUnits = useState<Record<string, ExerciseMeasurementUnit>>(
+    'exercise-units',
+    () => readStorage(STORAGE_KEYS.exerciseUnits, {})
+  )
 
   if (import.meta.client) {
     // useState's initializer only runs on the server, so the client must
@@ -253,6 +262,7 @@ export const useWorkoutStorage = () => {
       settings.value = {
         language: readStorage<WorkoutSettings>(STORAGE_KEYS.settings, settings.value).language || 'en'
       }
+      exerciseUnits.value = readStorage(STORAGE_KEYS.exerciseUnits, {})
     }
 
     watch(
@@ -272,13 +282,14 @@ export const useWorkoutStorage = () => {
       (value) => writeStorage(STORAGE_KEYS.settings, value),
       { deep: true }
     )
+    watch(exerciseUnits, (value) => writeStorage(STORAGE_KEYS.exerciseUnits, value), { deep: true })
   }
 
   const setLanguage = (language: WorkoutLanguage) => {
     settings.value = { ...settings.value, language }
   }
 
-  const addExercise = (input: { name: string; tags: string[]; description: string; defaultWeightUnit: 'kg' | 'lb' }) => {
+  const addExercise = (input: { name: string; tags: string[]; description: string; defaultWeightUnit: 'kg' | 'lb'; measurementUnit?: ExerciseMeasurementUnit }) => {
     const name = input.name.trim()
 
     if (!name) {
@@ -290,6 +301,7 @@ export const useWorkoutStorage = () => {
       name,
       tags: normalizeTags(input.tags),
       defaultWeightUnit: input.defaultWeightUnit || 'kg',
+      measurementUnit: input.measurementUnit || 'reps',
       isCustom: true,
       description: input.description.trim() || 'Custom exercise added by the user.'
     }
@@ -306,7 +318,7 @@ export const useWorkoutStorage = () => {
     return exercise
   }
 
-  const updateExercise = (id: string, input: { name: string; tags: string[]; description: string; defaultWeightUnit: 'kg' | 'lb' }) => {
+  const updateExercise = (id: string, input: { name: string; tags: string[]; description: string; defaultWeightUnit: 'kg' | 'lb'; measurementUnit?: ExerciseMeasurementUnit }) => {
     const name = input.name.trim()
     const index = customExercises.value.findIndex((exercise) => exercise.id === id)
 
@@ -333,7 +345,8 @@ export const useWorkoutStorage = () => {
       name,
       tags: normalizeTags(input.tags),
       description: input.description.trim() || 'Custom exercise added by the user.',
-      defaultWeightUnit: input.defaultWeightUnit || 'kg'
+      defaultWeightUnit: input.defaultWeightUnit || 'kg',
+      measurementUnit: input.measurementUnit || existingExercise.measurementUnit || 'reps'
     }
 
     customExercises.value[index] = updatedExercise
@@ -376,8 +389,35 @@ export const useWorkoutStorage = () => {
     return true
   }
 
+  const configuredSeedExercises = computed(() => seedExercises.value.map((exercise) => ({
+    ...exercise,
+    measurementUnit: exerciseUnits.value[exercise.id] || exercise.measurementUnit || 'reps'
+  })))
+  const isTimedExercise = (id: string) =>
+    [...configuredSeedExercises.value, ...customExercises.value].find((exercise) => exercise.id === id)?.measurementUnit === 'seconds'
+  const measurementLabel = (id: string) => isTimedExercise(id)
+    ? (settings.value.language === 'de' ? 'Sekunden' : 'Seconds')
+    : (settings.value.language === 'de' ? 'Wiederholungen' : 'Reps')
+  const setExerciseMeasurementUnit = (id: string, unit: ExerciseMeasurementUnit) => {
+    const customExercise = customExercises.value.find((exercise) => exercise.id === id)
+    if (customExercise) {
+      customExercise.measurementUnit = unit
+    } else if (seedExercises.value.some((exercise) => exercise.id === id)) {
+      exerciseUnits.value = { ...exerciseUnits.value, [id]: unit }
+    } else {
+      throw new Error(`Exercise not found: ${id}`)
+    }
+  }
+  const replaceSeedExercises = (exercises: Exercise[]) => {
+    seedExercises.value = exercises.map((exercise) => ({
+      ...exercise,
+      measurementUnit: exerciseUnits.value[exercise.id] || exercise.measurementUnit || 'reps'
+    }))
+  }
+
   return {
-    seedExercises,
+    seedExercises: configuredSeedExercises,
+    replaceSeedExercises,
     customExercises,
     workouts,
     settings,
@@ -386,6 +426,10 @@ export const useWorkoutStorage = () => {
     updateExercise,
     addWorkout,
     updateWorkout,
-    deleteWorkout
+    deleteWorkout,
+    isTimedExercise,
+    measurementLabel,
+    setExerciseMeasurementUnit,
+    exerciseUnits
   }
 }

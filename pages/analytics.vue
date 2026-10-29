@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Exercise, Workout } from '~/composables/useWorkoutStorage'
+import { exerciseVolume, workoutVolume } from '~/domain/workout-domain'
 
-const { settings, seedExercises, customExercises, workouts } = useWorkoutStorage()
+const { settings, seedExercises, customExercises, workouts, isTimedExercise, measurementLabel } = useWorkoutStorage()
 
 const selectedExerciseId = ref<'all' | string>('all')
 const rangeMode = ref<'all' | 'week' | 'month' | 'custom'>('all')
@@ -26,6 +27,9 @@ const translations = {
     previous: 'Previous',
     bestWeight: 'Best weight',
     bestReps: 'Best reps',
+    bestTime: 'Longest hold (seconds)',
+    timeTrend: 'Total seconds per workout',
+    averageTime: 'Average seconds per exercise',
     weightTrend: 'Best weight over time',
     repsTrend: 'Total reps per workout',
     volumeTrend: 'Volume per workout',
@@ -58,6 +62,9 @@ const translations = {
     previous: 'Vorherige',
     bestWeight: 'Bestes Gewicht',
     bestReps: 'Beste Wiederholungen',
+    bestTime: 'Längste Haltedauer (Sekunden)',
+    timeTrend: 'Sekunden pro Training',
+    averageTime: 'Durchschnittliche Sekunden pro Übung',
     weightTrend: 'Bestes Gewicht im Zeitverlauf',
     repsTrend: 'Wiederholungen pro Training',
     volumeTrend: 'Volumen pro Training',
@@ -81,6 +88,9 @@ const allExercises = computed(() => [...seedExercises.value, ...customExercises.
 const selectedExercise = computed<Exercise | undefined>(() => selectedExerciseId.value === 'all'
   ? undefined
   : allExercises.value.find((exercise) => exercise.id === selectedExerciseId.value))
+const selectedIsTimed = computed(() => isTimedExercise(selectedExerciseId.value))
+const metricLabel = computed(() => selectedIsTimed.value ? t.value.timeTrend : t.value.repsTrend)
+const averageLabel = computed(() => selectedIsTimed.value ? t.value.averageTime : t.value.averageReps)
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('de-DE', {
   day: '2-digit',
@@ -116,6 +126,7 @@ const rangeStart = computed(() => {
 const rangeEnd = computed(() => rangeMode.value === 'custom' ? toDate.value : '')
 
 interface HistoryPoint {
+  exerciseId: string
   workout: Workout
   date: string
   round: number
@@ -129,11 +140,12 @@ const history = computed<HistoryPoint[]>(() => workouts.value
     .filter((exercise) => selectedExerciseId.value === 'all' || exercise.exerciseId === selectedExerciseId.value)
     .flatMap((exercise) => exercise.rounds.map((round) => ({
       workout,
+      exerciseId: exercise.exerciseId,
       date: workout.date,
       round: round.round,
       weightKg: round.weightKg,
       reps: round.reps,
-      volume: round.weightKg * (round.weightCount || 1) * round.reps
+      volume: isTimedExercise(exercise.exerciseId) ? 0 : round.weightKg * (round.weightCount || 1) * round.reps
     }))))
   .filter((point) => (!rangeStart.value || point.date >= rangeStart.value) && (!rangeEnd.value || point.date <= rangeEnd.value))
   .sort((left, right) => left.date.localeCompare(right.date) || left.round - right.round))
@@ -141,7 +153,9 @@ const history = computed<HistoryPoint[]>(() => workouts.value
 const latest = computed(() => history.value.at(-1))
 const previous = computed(() => history.value.at(-2))
 const bestWeight = computed(() => history.value.reduce((best, point) => Math.max(best, point.weightKg), 0))
-const bestReps = computed(() => history.value.reduce((best, point) => Math.max(best, point.reps), 0))
+const bestReps = computed(() => history.value
+  .filter((point) => selectedIsTimed.value || !isTimedExercise(point.exerciseId))
+  .reduce((best, point) => Math.max(best, point.reps), 0))
 const filteredWorkouts = computed(() => workouts.value
   .filter((workout) => (!rangeStart.value || workout.date >= rangeStart.value) && (!rangeEnd.value || workout.date <= rangeEnd.value))
   .sort((left, right) => right.date.localeCompare(left.date) || (right.createdAt || '').localeCompare(left.createdAt || '')))
@@ -162,15 +176,16 @@ const workoutMetrics = computed<WorkoutMetric[]>(() => filteredWorkouts.value
       selectedExerciseId.value === 'all' || exercise.exerciseId === selectedExerciseId.value
     )
     const rounds = exercises.flatMap((exercise) => exercise.rounds)
-    const reps = rounds.reduce((total, round) => total + round.reps, 0)
+    const measurementExercises = exercises.filter((exercise) => selectedIsTimed.value || !isTimedExercise(exercise.exerciseId))
+    const reps = measurementExercises.flatMap((exercise) => exercise.rounds).reduce((total, round) => total + round.reps, 0)
 
     return {
       workout,
       date: workout.date,
-      volume: rounds.reduce((total, round) => total + round.weightKg * (round.weightCount || 1) * round.reps, 0),
+      volume: exercises.reduce((total, exercise) => total + exerciseVolume(exercise, isTimedExercise(exercise.exerciseId) ? 'seconds' : 'reps'), 0),
       rounds: rounds.length,
       reps,
-      averageReps: exercises.length ? reps / exercises.length : 0,
+      averageReps: measurementExercises.length ? reps / measurementExercises.length : 0,
       bestWeight: rounds.reduce((best, round) => Math.max(best, round.weightKg), 0)
     }
   })
@@ -430,7 +445,7 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
               <strong>{{ workout.title }}</strong>
               <small>{{ formatDate(workout.date) }} · {{ workout.exercises.length }} {{ t.exercises }}</small>
             </span>
-            <strong>{{ workout.exercises.reduce((total, exercise) => total + exercise.rounds.reduce((sum, round) => sum + round.weightKg * (round.weightCount || 1) * round.reps, 0), 0) }} {{ t.kg }}</strong>
+            <strong>{{ workoutVolume(workout, allExercises) }} {{ t.kg }}</strong>
           </button>
         </div>
         <p v-else class="empty-analytics">{{ t.noWorkouts }}</p>
@@ -443,12 +458,12 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
       <section v-if="history.length" class="summary-grid">
         <article class="summary-card">
           <span>{{ t.latest }}</span>
-          <strong>{{ latest?.weightKg }} {{ t.kg }} · {{ latest?.reps }} {{ t.reps }}</strong>
+          <strong>{{ latest?.weightKg }} {{ t.kg }} · {{ latest?.reps }} {{ latest ? measurementLabel(latest.exerciseId) : '' }}</strong>
           <small>{{ latest ? formatDateTime(latest.workout.createdAt || latest.date) : '' }}</small>
         </article>
         <article class="summary-card">
           <span>{{ t.previous }}</span>
-          <strong>{{ previous?.weightKg || 0 }} {{ t.kg }} · {{ previous?.reps || 0 }} {{ t.reps }}</strong>
+          <strong>{{ previous?.weightKg || 0 }} {{ t.kg }} · {{ previous?.reps || 0 }} {{ measurementLabel(previous?.exerciseId || selectedExerciseId) }}</strong>
           <small>{{ previous ? formatDateTime(previous.workout.createdAt || previous.date) : '-' }}</small>
         </article>
         <article class="summary-card">
@@ -456,8 +471,8 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
           <strong>{{ bestWeight }} {{ t.kg }}</strong>
         </article>
         <article class="summary-card">
-          <span>{{ t.bestReps }}</span>
-          <strong>{{ bestReps }} {{ t.reps }}</strong>
+          <span>{{ selectedIsTimed ? t.bestTime : t.bestReps }}</span>
+          <strong>{{ bestReps }} {{ measurementLabel(selectedExerciseId) }}</strong>
         </article>
       </section>
 
@@ -480,8 +495,8 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
           </div>
         </article>
         <article class="chart-panel panel">
-          <h3>{{ t.repsTrend }}</h3>
-          <div class="line-chart" role="img" :aria-label="t.repsTrend">
+          <h3>{{ metricLabel }}</h3>
+          <div class="line-chart" role="img" :aria-label="metricLabel">
             <svg viewBox="0 0 640 220" preserveAspectRatio="none">
               <g class="chart-axis">
                 <line x1="52" y1="20" x2="52" y2="190" />
@@ -495,7 +510,7 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
             <div class="chart-labels"><small v-for="metric in workoutMetrics" :key="`${metric.workout.id}-reps-label`">{{ formatDate(metric.date) }}</small></div>
           </div>
         </article>
-        <article class="chart-panel panel chart-wide">
+        <article v-if="!selectedIsTimed" class="chart-panel panel chart-wide">
           <h3>{{ t.volumeTrend }}</h3>
           <div class="line-chart" role="img" :aria-label="t.volumeTrend">
             <svg viewBox="0 0 640 220" preserveAspectRatio="none">
@@ -528,8 +543,8 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
           </div>
         </article>
         <article class="chart-panel panel chart-wide">
-          <h3>{{ t.averageReps }}</h3>
-          <div class="line-chart" role="img" :aria-label="t.averageReps">
+          <h3>{{ averageLabel }}</h3>
+          <div class="line-chart" role="img" :aria-label="averageLabel">
             <svg viewBox="0 0 640 220" preserveAspectRatio="none">
               <g class="chart-axis">
                 <line x1="52" y1="20" x2="52" y2="190" />

@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { parseWorkoutNotes } from '~/utils/workoutImport'
 import { findMatchingExercise } from '~/utils/exerciseMatching'
 
-const { settings, customExercises, workouts, seedExercises, addExercise, addWorkout } = useWorkoutStorage()
+const { settings, customExercises, workouts, seedExercises, addExercise, addWorkout, exerciseUnits, measurementLabel } = useWorkoutStorage()
 
 const converter = reactive({
   value: 5,
@@ -80,7 +80,8 @@ const exportWorkoutData = () => {
     version: 1,
     exportedAt: new Date().toISOString(),
     workouts: workouts.value,
-    customExercises: customExercises.value
+    customExercises: customExercises.value,
+    exerciseUnits: exerciseUnits.value
   }
   const data = JSON.stringify(exportPayload, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
@@ -196,7 +197,7 @@ const t = computed(() => translations[settings.value.language])
             <div v-if="importPreview.length" class="preview-list">
               <div v-for="exercise in importPreview" :key="exercise.name" class="preview-exercise">
                 <span>{{ exercise.name }}</span>
-                <small>{{ exercise.rounds.map((round) => `${round.weightKg} kg x ${round.reps}`).join(' · ') }}</small>
+                <small>{{ exercise.rounds.map((round) => `${round.weightKg} kg x ${round.reps} ${measurementLabel(findMatchingExercise(availableExercises, exercise.name)?.id || '')}`).join(' · ') }}</small>
               </div>
             </div>
             <p v-else>{{ t.noImportPreview }}</p>
