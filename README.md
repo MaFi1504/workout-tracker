@@ -29,9 +29,29 @@ pnpm build
 pnpm preview
 ```
 
+## Continuous integration
+
+GitHub Actions ([ci.yml](.github/workflows/ci.yml)) runs on every push: it installs dependencies, runs the tests, builds the app, builds the Docker image, and smoke-tests the container. The image is then published to the GitHub Container Registry as `ghcr.io/mafi1504/workout-tracker` with these tags:
+
+- `latest` – the newest build of `main`
+- `<branch>` – the newest build of a branch
+- `sha-<commit>` – an immutable build of a specific commit
+- `<version>` / `<major>.<minor>` – for pushed `v*` tags
+
+Dependabot branches are built and tested but not published. Patch and minor Dependabot updates are merged automatically once all required checks pass ([dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml)).
+
 ## Production container
 
-Build and start the production container with Docker Compose:
+Pull and start the prebuilt image on the host:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Set `WORKOUT_TRACKER_TAG` to run a specific tag, for example `WORKOUT_TRACKER_TAG=sha-<commit>`.
+
+Alternatively, build and start the production container locally:
 
 ```bash
 docker compose up --build -d
