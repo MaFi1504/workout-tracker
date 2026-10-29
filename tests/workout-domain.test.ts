@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { COMMON_WEIGHTS_KG, addRep, exerciseHistory, exerciseVolume, filterWorkouts, kgToLb, lbToKg, removeRep, updateRoundWeight, validateWorkout, workoutVolume } from './domain/workout-domain'
-import type { Workout } from './composables/useWorkoutStorage'
+import { COMMON_WEIGHTS_KG, addRep, exerciseHistory, exerciseVolume, filterWorkouts, kgToLb, lbToKg, nextRoundSide, removeRep, updateRoundWeight, validateWorkout, workoutVolume } from '../domain/workout-domain'
+import type { Workout } from '../composables/useWorkoutStorage'
 
 const workout = (overrides: Partial<Workout> = {}): Workout => ({ id: 'workout-1', date: '2026-01-15', title: 'Upper body', notes: '', exercises: [{ id: 'workout-1-exercise', exerciseId: 'front-raise', order: 0, side: 'synchronized', rounds: [{ id: 'round-1', round: 1, weightKg: 5, reps: 10, side: 'both' }, { id: 'round-2', round: 2, weightKg: 6, reps: 8, side: 'both' }] }], ...overrides })
 
@@ -8,9 +8,25 @@ describe('measurement tools', () => {
   it('offers quick-select weights', () => expect(COMMON_WEIGHTS_KG).toEqual([1, 3, 5, 8, 10]))
   it('converts kg to lb and back using kg as canonical value', () => { expect(kgToLb(5)).toBeCloseTo(11.0231, 3); expect(lbToKg(kgToLb(5))).toBeCloseTo(5, 10) })
   it('increments reps and corrects the last count', () => { expect(addRep(9)).toBe(10); expect(removeRep(10)).toBe(9); expect(removeRep(0)).toBe(0) })
+  it('cycles round side selection from both to left to right and back', () => {
+    expect(nextRoundSide()).toBe('left')
+    expect(nextRoundSide('left')).toBe('right')
+    expect(nextRoundSide('right')).toBe('both')
+  })
 })
 
 describe('workout records', () => {
+  it('excludes timed holds from lifting volume without changing stored measurements', () => {
+    const entry = workout()
+    const hold = { ...entry.exercises[0]!, id: 'hold', exerciseId: 'plank', order: 1 }
+    entry.exercises.push(hold)
+    expect(exerciseVolume(hold, 'seconds')).toBe(0)
+    expect(workoutVolume(entry, [{ id: 'plank', measurementUnit: 'seconds' }])).toBe(98)
+    expect(workoutVolume(entry, [{ id: 'plank', measurementUnit: 'reps' }])).toBe(196)
+    expect(exerciseHistory([entry], 'plank', 'seconds').map((point) => point.volume)).toEqual([0, 0])
+    expect(hold.rounds.map((round) => round.reps)).toEqual([10, 8])
+    expect(validateWorkout(entry)).toBe(true)
+  })
   it('preserves round measurements and calculates nested volume', () => { const entry = workout(); expect(entry.exercises[0]?.rounds.map(({ weightKg, reps }) => ({ weightKg, reps }))).toEqual([{ weightKg: 5, reps: 10 }, { weightKg: 6, reps: 8 }]); expect(exerciseVolume(entry.exercises[0]!)).toBe(98); expect(workoutVolume(entry)).toBe(98) })
   it('counts paired weights for synchronized rounds', () => { const entry = workout(); entry.exercises[0]!.rounds = [{ id: 'paired', round: 1, weightKg: 5, weightCount: 2, reps: 10, side: 'both' }]; expect(exerciseVolume(entry.exercises[0]!)).toBe(100) })
   it('updates following round weights and weight counts from round one', () => {
