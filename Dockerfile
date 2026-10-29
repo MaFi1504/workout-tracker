@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 
 ENV COREPACK_HOME=/usr/local/share/corepack
 WORKDIR /app
@@ -11,7 +11,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:22-alpine AS runtime
+FROM node:25-alpine AS runtime
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
