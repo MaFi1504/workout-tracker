@@ -1,9 +1,8 @@
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
-ENV COREPACK_HOME=/usr/local/share/corepack
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
+RUN npm install -g pnpm@10.23.0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile
@@ -11,7 +10,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
