@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { EXERCISE_TAGS } from '~/composables/useWorkoutStorage'
 import type { Exercise } from '~/composables/useWorkoutStorage'
 import type { ExerciseMeasurementUnit } from '~/data/exerciseCatalog'
+import { matchesExerciseSearch } from '~/utils/exerciseMatching'
 
 const { settings, seedExercises, customExercises, addExercise, updateExercise, setExerciseMeasurementUnit } = useWorkoutStorage()
 
@@ -88,7 +89,7 @@ const filteredExercises = computed(() => {
 
   return allExercises.value.filter((exercise) => {
     const matchesTag = tagFilter.value === 'all' || exercise.tags.includes(tagFilter.value)
-    const matchesSearch = !term || exercise.name.toLowerCase().includes(term) || exercise.tags.some((tag) => tag.toLowerCase().includes(term))
+    const matchesSearch = matchesExerciseSearch(exercise, term)
     return matchesTag && matchesSearch
   })
 })

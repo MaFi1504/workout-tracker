@@ -50,6 +50,7 @@ const importWorkout = () => {
       exerciseId: exercise.id,
       order: exerciseIndex,
       side: 'synchronized' as const,
+      notes: '',
       rounds: item.rounds.map((round, roundIndex) => ({
         id: `import-${Date.now()}-${exerciseIndex}-${roundIndex}`,
         round: roundIndex + 1,

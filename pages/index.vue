@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { nextRoundSide, updateRoundWeight, workoutVolume } from '~/domain/workout-domain'
+import { computed, onMounted, ref, watch } from 'vue'
+import { combineDateAndTime, localDateIso, localTimeIso, nextRoundSide, updateRoundWeight, workoutVolume } from '~/domain/workout-domain'
 import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
+import { matchesExerciseSearch } from '~/utils/exerciseMatching'
 
-const { settings, customExercises, workouts, seedExercises, replaceSeedExercises, addWorkout, isTimedExercise, measurementLabel } = useWorkoutStorage()
+const { settings, customExercises, workouts, seedExercises, replaceSeedExercises, addWorkout, addExercise, isTimedExercise, measurementLabel, activeWorkout, resetActiveWorkout } = useWorkoutStorage()
 const route = useRoute()
 const router = useRouter()
 
 const search = ref('')
 const selectedExerciseId = ref('front-raise')
-const draftExercises = ref<WorkoutExercise[]>([])
+const draftExercises = computed<WorkoutExercise[]>({
+  get: () => activeWorkout.value.exercises,
+  set: (exercises) => { activeWorkout.value.exercises = exercises }
+})
 const activeInfoExerciseId = ref<string | null>(null)
 const hoveredInfoExerciseId = ref<string | null>(null)
-const form = reactive({
-  date: new Date().toISOString().slice(0, 10),
-  title: 'Lower Body workout',
-  notes: ''
-})
+const form = computed(() => activeWorkout.value)
 
 const commonWeightsKg = [1, 3, 5, 8, 10] as const
 const weightDialogOpen = ref(false)
@@ -34,6 +34,7 @@ const translations = {
     language: 'DE',
     searchPlaceholder: 'Search exercises',
     addToWorkout: 'Add to workout',
+    createAndAdd: 'Create and add',
     totalExercises: 'Exercises',
     totalWorkouts: 'Workouts',
     workoutTitle: 'Workout title',
@@ -89,6 +90,7 @@ const translations = {
     language: 'EN',
     searchPlaceholder: 'Übungen suchen',
     addToWorkout: 'Zum Training hinzufügen',
+    createAndAdd: 'Erstellen und hinzufügen',
     totalExercises: 'Übungen',
     totalWorkouts: 'Trainingseinheiten',
     workoutTitle: 'Name des Trainings',
@@ -147,9 +149,7 @@ const filteredExercises = computed(() => {
     return availableExercises.value
   }
 
-  return availableExercises.value.filter((exercise) =>
-    exercise.name.toLowerCase().includes(term) || exercise.tags.some((tag) => tag.toLowerCase().includes(term))
-  )
+  return availableExercises.value.filter((exercise) => matchesExerciseSearch(exercise, term))
 })
 
 const totalVolume = computed(() =>
@@ -165,7 +165,7 @@ const roundSummary = (exercise: WorkoutExercise) =>
 const roundWeightLabel = (round: RoundEntry) =>
   `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg`
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => localDateIso()
 
 const germanDateFormatter = new Intl.DateTimeFormat('de-DE', {
   day: '2-digit',
@@ -271,14 +271,15 @@ const cloneWorkoutExercises = (workout: Workout) => workout.exercises
     exerciseId: exercise.exerciseId,
     order: exerciseIndex,
     side: exercise.side,
+    notes: exercise.notes,
     rounds: cloneRounds(exercise.exerciseId, exercise.rounds, `${Date.now()}-${exerciseIndex}`)
   }))
 
 const loadWorkout = (workout: Workout) => {
   draftExercises.value = cloneWorkoutExercises(workout)
-  form.title = workout.title
-  form.date = today()
-  form.notes = workout.notes
+  form.value.title = workout.title
+  form.value.date = today()
+  form.value.notes = workout.notes
   selectedExerciseId.value = draftExercises.value[0]?.exerciseId || selectedExerciseId.value
 }
 
@@ -334,6 +335,7 @@ const addSelectedExercise = () => {
     exerciseId: exercise.id,
     order: draftExercises.value.length,
     side: previousExercise?.side || 'synchronized',
+    notes: '',
     rounds: previousExercise
       ? cloneRounds(exercise.id, previousExercise.rounds)
       : createRounds(exercise.id, 10)
@@ -347,6 +349,15 @@ const removeDraftExercise = (draftId: string) => {
   draftExercises.value = draftExercises.value
     .filter((exercise) => exercise.id !== draftId)
     .map((exercise, index) => ({ ...exercise, order: index }))
+}
+
+const createAndAddExercise = () => {
+  const name = search.value.trim()
+  if (!name || filteredExercises.value.length) return
+  const exercise = addExercise({ name, tags: ['General'], description: '', defaultWeightUnit: 'kg' })
+  if (!exercise) return
+  selectedExerciseId.value = exercise.id
+  addSelectedExercise()
 }
 
 const moveDraftExercise = (draftId: string, direction: -1 | 1) => {
@@ -396,13 +407,14 @@ onMounted(async () => {
 })
 
 const handleAddWorkout = () => {
-  if (!form.date || !form.title.trim() || !draftExercises.value.length) {
+  if (!form.value.date || !form.value.title.trim() || !draftExercises.value.length) {
     return
   }
 
   addWorkout({
-    date: form.date,
-    title: form.title.trim(),
+    date: form.value.date,
+    createdAt: combineDateAndTime(form.value.date, localTimeIso()),
+    title: form.value.title.trim(),
     exercises: draftExercises.value.map((exercise, index) => ({
       ...exercise,
       order: index,
@@ -412,12 +424,10 @@ const handleAddWorkout = () => {
         reps: Number(round.reps) || 0
       }))
     })),
-    notes: form.notes
+    notes: form.value.notes
   })
 
-  draftExercises.value = []
-  form.title = 'Lower Body workout'
-  form.notes = ''
+  resetActiveWorkout()
 }
 </script>
 
@@ -460,6 +470,12 @@ const handleAddWorkout = () => {
 
           <div class="exercise-list">
             <button
+              v-if="search.trim() && !filteredExercises.length"
+              type="button"
+              class="primary-button"
+              @click="createAndAddExercise"
+            >{{ t.createAndAdd }} “{{ search.trim() }}”</button>
+            <button
               v-for="exercise in filteredExercises"
               :key="exercise.id"
               type="button"
@@ -472,7 +488,7 @@ const handleAddWorkout = () => {
             </button>
           </div>
 
-          <button type="button" class="primary-button" @click="addSelectedExercise">
+          <button v-if="!search.trim() || filteredExercises.length" type="button" class="primary-button" @click="addSelectedExercise">
             {{ t.addToWorkout }}
           </button>
         </div>
@@ -657,6 +673,7 @@ const handleAddWorkout = () => {
                 <button type="button" class="secondary-button" @click="addRound(exercise)">
                   {{ t.addRound }}
                 </button>
+                <ExerciseNotes v-model="exercise.notes" :label="t.notes" />
               </article>
             </div>
 

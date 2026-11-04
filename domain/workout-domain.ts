@@ -20,6 +20,20 @@ export const updateRoundWeight = (rounds: RoundEntry[], roundIndex: number, weig
     ? { ...round, weightKg, ...(weightCount === undefined ? {} : { weightCount }) }
     : round)
 
+const pad = (value: number) => String(value).padStart(2, '0')
+export const localDateIso = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+export const localTimeIso = (date = new Date()) => `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+// Local time of day the workout took place; date-only legacy workouts start at midnight.
+export const workoutTime = (workout: Pick<Workout, 'createdAt'>) => {
+  const timestamp = workout.createdAt ? new Date(workout.createdAt) : null
+  return timestamp && !Number.isNaN(timestamp.getTime()) ? localTimeIso(timestamp) : '00:00:00'
+}
+// Date strings without a zone are parsed as local time, matching the date/time inputs.
+export const combineDateAndTime = (date: string, time: string) => {
+  const [hours = '00', minutes = '00', seconds = '00'] = (time || '').split(':')
+  return new Date(`${date}T${pad(Number(hours) || 0)}:${pad(Number(minutes) || 0)}:${pad(Number(seconds) || 0)}`).toISOString()
+}
+
 export const validateWorkout = (workout: Omit<Workout, 'id'> | Workout) => {
   if (!workout.date || !workout.title.trim() || !workout.exercises.length) return false
   return workout.exercises.every((exercise, exerciseIndex) => exercise.order === exerciseIndex && exercise.rounds.length > 0 && exercise.rounds.every((round, roundIndex) => round.round === roundIndex + 1 && Number.isFinite(round.weightKg) && round.weightKg >= 0 && (round.weightCount === undefined || round.weightCount === 1 || round.weightCount === 2) && Number.isInteger(round.reps) && round.reps >= 0 && (round.side === 'left' || round.side === 'right' || round.side === 'both')))

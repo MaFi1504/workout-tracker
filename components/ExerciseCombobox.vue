@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Exercise } from '~/composables/useWorkoutStorage'
+import { matchesExerciseSearch } from '~/utils/exerciseMatching'
 
 const props = defineProps<{
   modelValue: string
@@ -22,11 +23,7 @@ watch(() => props.modelValue, (id) => { query.value = nameFor(id) })
 const filtered = computed(() => {
   const term = query.value.trim().toLowerCase()
   if (!term || term === nameFor(props.modelValue).toLowerCase()) return props.options
-  return props.options.filter((option) =>
-    option.name.toLowerCase().includes(term)
-    || option.aliases?.some((alias) => alias.toLowerCase().includes(term))
-    || option.tags.some((tag) => tag.toLowerCase().includes(term))
-  )
+  return props.options.filter((option) => matchesExerciseSearch(option, term))
 })
 
 const openList = () => {
@@ -85,7 +82,9 @@ const move = (direction: 1 | -1) => {
         @mousedown.prevent="select(option)"
         @mouseenter="activeIndex = index"
       >{{ option.name }}</li>
-      <li v-if="!filtered.length" class="empty">{{ emptyText || '—' }}</li>
+      <li v-if="!filtered.length" class="empty" @mousedown.prevent>
+        <slot name="empty" :query="query.trim()" :close="close">{{ emptyText || '—' }}</slot>
+      </li>
     </ul>
   </div>
 </template>

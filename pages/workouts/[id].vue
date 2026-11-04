@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { exerciseVolume, workoutVolume } from '~/domain/workout-domain'
+import { combineDateAndTime, exerciseVolume, workoutTime, workoutVolume } from '~/domain/workout-domain'
 import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
+import { normalizeExerciseName } from '~/utils/exerciseMatching'
 
 const route = useRoute()
-const { settings, workouts, seedExercises, customExercises, updateWorkout, deleteWorkout, isTimedExercise, measurementLabel } = useWorkoutStorage()
+const { settings, workouts, seedExercises, customExercises, updateWorkout, deleteWorkout, isTimedExercise, measurementLabel, addExercise: createExercise } = useWorkoutStorage()
 const workout = computed(() => workouts.value.find((item) => item.id === route.params.id))
 const draft = ref<Workout | null>(null)
 const editing = ref(false)
+const draftTime = ref('00:00:00')
 const commonWeightsKg = [1, 3, 5, 8, 10] as const
 const weightDialogOpen = ref(false)
 const weightDialogRound = ref<RoundEntry | null>(null)
@@ -17,8 +19,8 @@ const newExerciseId = ref('')
 const returnPath = computed(() => route.query.from === 'analytics' ? '/analytics' : '/')
 
 const translations = {
-  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', loadWorkout: 'Load as new workout', delete: 'Delete workout', confirmDelete: 'Are you sure you want to delete this workout?', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', notFound: 'Workout not found.', saved: 'Changes saved.', weightDialog: 'Select weight', currentWeight: 'Current weight', quickWeights: 'Quick weights', apply: 'Apply weight', exercise: 'Exercise', addExercise: 'Add exercise', selectExercise: 'Select exercise', removeExercise: 'Remove exercise', addRound: 'Add round', removeRound: 'Remove round', confirmRemoveExercise: 'Remove this exercise from the workout?', searchExercise: 'Type to search exercises…', noResults: 'No matching exercises' },
-  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', loadWorkout: 'Als neues Training laden', delete: 'Training löschen', confirmDelete: 'Möchtest du dieses Training wirklich löschen?', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.', weightDialog: 'Gewicht auswählen', currentWeight: 'Aktuelles Gewicht', quickWeights: 'Schnellgewichte', apply: 'Gewicht übernehmen', exercise: 'Übung', addExercise: 'Übung hinzufügen', selectExercise: 'Übung auswählen', removeExercise: 'Übung entfernen', addRound: 'Runde hinzufügen', removeRound: 'Runde entfernen', confirmRemoveExercise: 'Diese Übung aus dem Training entfernen?', searchExercise: 'Übung suchen…', noResults: 'Keine passenden Übungen' }
+  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', loadWorkout: 'Load as new workout', delete: 'Delete workout', confirmDelete: 'Are you sure you want to delete this workout?', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', time: 'Time', notFound: 'Workout not found.', saved: 'Changes saved.', weightDialog: 'Select weight', currentWeight: 'Current weight', quickWeights: 'Quick weights', apply: 'Apply weight', exercise: 'Exercise', addExercise: 'Add exercise', selectExercise: 'Select exercise', removeExercise: 'Remove exercise', addRound: 'Add round', removeRound: 'Remove round', confirmRemoveExercise: 'Remove this exercise from the workout?', searchExercise: 'Type to search exercises…', noResults: 'No matching exercises' },
+  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', loadWorkout: 'Als neues Training laden', delete: 'Training löschen', confirmDelete: 'Möchtest du dieses Training wirklich löschen?', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', time: 'Uhrzeit', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.', weightDialog: 'Gewicht auswählen', currentWeight: 'Aktuelles Gewicht', quickWeights: 'Schnellgewichte', apply: 'Gewicht übernehmen', exercise: 'Übung', addExercise: 'Übung hinzufügen', selectExercise: 'Übung auswählen', removeExercise: 'Übung entfernen', addRound: 'Runde hinzufügen', removeRound: 'Runde entfernen', confirmRemoveExercise: 'Diese Übung aus dem Training entfernen?', searchExercise: 'Übung suchen…', noResults: 'Keine passenden Übungen' }
 } as const
 const t = computed(() => translations[settings.value.language])
 const availableExercises = computed(() => [...seedExercises.value, ...customExercises.value])
@@ -26,6 +28,21 @@ const exerciseName = (id: string) => availableExercises.value.find((item) => ite
 const sortedExercises = computed(() => [...availableExercises.value].sort((left, right) => left.name.localeCompare(right.name)))
 const usedExerciseIds = computed(() => new Set(draft.value?.exercises.map((exercise) => exercise.exerciseId) || []))
 const exerciseOptions = (currentId?: string) => sortedExercises.value.filter((item) => item.id === currentId || !usedExerciseIds.value.has(item.id))
+const createAndAddLabel = computed(() => settings.value.language === 'de' ? 'Erstellen und hinzufügen' : 'Create and add')
+const canCreateExercise = (name: string) => Boolean(name.trim()) && !availableExercises.value.some((exercise) =>
+  [exercise.name, ...(exercise.aliases || [])].some((alias) => normalizeExerciseName(alias) === normalizeExerciseName(name))
+)
+const createAndSelectExercise = (name: string, exercise?: WorkoutExercise) => {
+  if (!draft.value || !canCreateExercise(name)) return
+  const created = createExercise({ name, tags: ['General'], description: '', defaultWeightUnit: 'kg' })
+  if (!created) return
+  if (exercise) {
+    exercise.exerciseId = created.id
+  } else {
+    newExerciseId.value = created.id
+    addExercise()
+  }
+}
 const renumberExercises = (exercises: WorkoutExercise[]) => exercises.map((exercise, index) => ({ ...exercise, order: index }))
 const addExercise = () => {
   const exerciseId = newExerciseId.value
@@ -36,6 +53,7 @@ const addExercise = () => {
     exerciseId,
     order: draft.value.exercises.length,
     side: 'synchronized',
+    notes: '',
     rounds: Array.from({ length: 3 }, (_, index) => ({
       id: `${exerciseId}-round-${stamp}-${index}`,
       round: index + 1,
@@ -81,6 +99,7 @@ const startEdit = () => {
       rounds: exercise.rounds.map((round) => ({ ...round }))
     }))
   }
+  draftTime.value = workoutTime(workout.value)
   editing.value = true
 }
 const cancelEdit = () => {
@@ -93,6 +112,7 @@ const save = () => {
   updateWorkout(draft.value.id, {
     title: draft.value.title.trim(),
     date: draft.value.date,
+    createdAt: combineDateAndTime(draft.value.date, draftTime.value),
     notes: draft.value.notes,
     exercises: renumberExercises(draft.value.exercises)
   })
@@ -159,11 +179,12 @@ const applyWeightDialog = () => {
           <template v-if="editing">
             <label>{{ t.workoutTitle }}<input v-model="draft!.title" type="text" /></label>
             <label>{{ t.date }}<input v-model="draft!.date" type="date" /></label>
+            <label>{{ t.time }}<input v-model="draftTime" type="time" step="1" /></label>
           </template>
           <template v-else>
             <span class="eyebrow">{{ t.title }}</span>
             <h1>{{ current.title }}</h1>
-            <p>{{ current.date }}</p>
+            <p>{{ current.date }}<template v-if="current.createdAt"> · {{ workoutTime(current) }}</template></p>
           </template>
         </section>
 
@@ -180,7 +201,12 @@ const applyWeightDialog = () => {
           <div class="exercise-list">
             <article v-for="exercise in current.exercises" :key="exercise.id" class="exercise-card">
               <div class="exercise-header">
-                <ExerciseCombobox v-if="editing" v-model="exercise.exerciseId" :options="exerciseOptions(exercise.exerciseId)" :label="t.exercise" :placeholder="t.searchExercise" :empty-text="t.noResults" />
+                <ExerciseCombobox v-if="editing" v-model="exercise.exerciseId" :options="exerciseOptions(exercise.exerciseId)" :label="t.exercise" :placeholder="t.searchExercise" :empty-text="t.noResults">
+                  <template #empty="{ query, close }">
+                    <button v-if="canCreateExercise(query)" type="button" class="primary-button" @click="createAndSelectExercise(query, exercise); close()">{{ createAndAddLabel }} “{{ query }}”</button>
+                    <span v-else>{{ t.noResults }}</span>
+                  </template>
+                </ExerciseCombobox>
                 <h3 v-else>{{ exerciseName(exercise.exerciseId) }}</h3>
                 <div class="exercise-actions">
                   <strong v-if="!isTimedExercise(exercise.exerciseId)">{{ exerciseVolume(exercise) }} kg</strong>
@@ -201,10 +227,16 @@ const applyWeightDialog = () => {
                 </div>
               </div>
               <button v-if="editing" type="button" class="secondary-button small-button add-round" @click="addRound(exercise)">{{ t.addRound }}</button>
+              <ExerciseNotes v-model="exercise.notes" :label="t.notes" :readonly="!editing" />
             </article>
           </div>
           <div v-if="editing" class="add-exercise">
-            <ExerciseCombobox v-model="newExerciseId" :options="exerciseOptions()" :label="t.selectExercise" :placeholder="t.searchExercise" :empty-text="t.noResults" />
+            <ExerciseCombobox v-model="newExerciseId" :options="exerciseOptions()" :label="t.selectExercise" :placeholder="t.searchExercise" :empty-text="t.noResults">
+              <template #empty="{ query, close }">
+                <button v-if="canCreateExercise(query)" type="button" class="primary-button" @click="createAndSelectExercise(query); close()">{{ createAndAddLabel }} “{{ query }}”</button>
+                <span v-else>{{ t.noResults }}</span>
+              </template>
+            </ExerciseCombobox>
             <button type="button" class="primary-button" :disabled="!newExerciseId" @click="addExercise">{{ t.addExercise }}</button>
           </div>
         </section>

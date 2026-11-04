@@ -7,9 +7,17 @@ The app is configured as a Progressive Web App (PWA). It provides Android-sized 
 
 ## Exercise measurements
 
+Exercise searches in the library, active workout, and workout editor match names, aliases (such as **RDL** for **Romanian Deadlift**), and tags, ignoring case.
+
 Select an exercise in the exercise library to change its measurement unit between reps and time (seconds). Custom exercises also offer this option when creating or editing them. Plank, Side Plank, and DB V Crunch Holds default to seconds. Preferences are saved locally and included in JSON exports.
 
 Workout inputs, summaries, and exercise analytics use the configured unit. Timed holds are excluded from rep totals and lifting-volume calculations. Selecting a timed exercise in analytics shows its duration trends instead. Existing round values are preserved when changing a unit; they are interpreted in the newly selected unit, not converted.
+
+## Exercise notes
+
+Each exercise within a workout has its own notes, separate from the workout's overall notes. Expand **Notes** beneath an exercise to add text; empty note sections start collapsed and existing notes open automatically. Notes are preserved in active drafts, saved workouts, loaded workout copies, and JSON exports. Older workouts and drafts receive an empty note without removing any workout data.
+
+If an exercise search has no matches, choose **Create and add** to save the typed name as a local custom exercise and immediately use it in the workout. This also works in the workout editor. New exercises default to the General tag, kilograms, and reps; further details can be changed later in the exercise library.
 
 ## Development
 

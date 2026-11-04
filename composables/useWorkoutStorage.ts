@@ -1,5 +1,6 @@
 import { playlistExercises } from '../data/exerciseCatalog'
 import type { ExerciseMeasurementUnit } from '../data/exerciseCatalog'
+import { localDateIso } from '../domain/workout-domain'
 
 export type WorkoutLanguage = 'en' | 'de'
 
@@ -46,6 +47,7 @@ export interface WorkoutExercise {
   exerciseId: string
   order: number
   side: WorkoutSide
+  notes: string
   rounds: RoundEntry[]
 }
 
@@ -60,6 +62,25 @@ export interface Workout {
   notes: string
 }
 
+// In-progress workout on the overview page, persisted until the user saves it.
+export interface ActiveWorkout {
+  date: string
+  title: string
+  notes: string
+  exercises: WorkoutExercise[]
+}
+
+export const DEFAULT_ACTIVE_WORKOUT_TITLE = 'Lower Body workout'
+
+const todayIso = () => localDateIso()
+
+export const createActiveWorkout = (): ActiveWorkout => ({
+  date: todayIso(),
+  title: DEFAULT_ACTIVE_WORKOUT_TITLE,
+  notes: '',
+  exercises: []
+})
+
 export interface WorkoutSettings {
   language: WorkoutLanguage
 }
@@ -69,7 +90,8 @@ const STORAGE_KEYS = {
   workouts: 'workout:sessions',
   legacyWorkouts: 'workout:entries',
   settings: 'workout:settings',
-  exerciseUnits: 'workout:exercise-units'
+  exerciseUnits: 'workout:exercise-units',
+  activeWorkout: 'workout:active'
 } as const
 
 const baseExercises: Exercise[] = [
@@ -134,16 +156,22 @@ const writeStorage = <T>(key: string, value: T) => {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-const normalizeWorkouts = (value: unknown): Workout[] => {
+const normalizeWorkoutExerciseNotes = (exercise: WorkoutExercise): WorkoutExercise => ({
+  ...exercise,
+  notes: typeof exercise.notes === 'string' ? exercise.notes : ''
+})
+
+export const normalizeWorkouts = (value: unknown): Workout[] => {
   if (!Array.isArray(value)) {
     return []
   }
 
-  if (value.every((item) => item && Array.isArray((item as Workout).exercises))) {
-    return value as Workout[]
-  }
-
   return value.flatMap((item, index) => {
+    if (item && Array.isArray(item.exercises)) {
+      const workout = item as Workout
+      return [{ ...workout, exercises: workout.exercises.map(normalizeWorkoutExerciseNotes) }]
+    }
+
     const legacy = item as {
       id?: string
       exerciseId?: string
@@ -170,6 +198,7 @@ const normalizeWorkouts = (value: unknown): Workout[] => {
         exerciseId: legacy.exerciseId,
         order: 0,
         side: 'synchronized',
+        notes: '',
         rounds: Array.from({ length: sets }, (_, roundIndex) => ({
           id: `${workoutId}-round-${roundIndex}`,
           round: roundIndex + 1,
@@ -219,6 +248,22 @@ const normalizeExercise = (value: unknown): Exercise | null => {
   }
 }
 
+export const normalizeActiveWorkout = (value: unknown): ActiveWorkout => {
+  if (!value || typeof value !== 'object') return createActiveWorkout()
+  const item = value as Partial<ActiveWorkout>
+  const exercises = Array.isArray(item.exercises)
+    ? item.exercises.filter((exercise) => exercise && typeof exercise.exerciseId === 'string' && Array.isArray(exercise.rounds)).map(normalizeWorkoutExerciseNotes)
+    : []
+
+  return {
+    // An empty draft from an earlier day should start fresh on today's date.
+    date: exercises.length && typeof item.date === 'string' && item.date ? item.date : todayIso(),
+    title: typeof item.title === 'string' ? item.title : DEFAULT_ACTIVE_WORKOUT_TITLE,
+    notes: typeof item.notes === 'string' ? item.notes : '',
+    exercises
+  }
+}
+
 // Tracks whether the client has already re-read localStorage after SSR hydration.
 let hasHydratedFromStorage = false
 
@@ -245,6 +290,10 @@ export const useWorkoutStorage = () => {
     'exercise-units',
     () => readStorage(STORAGE_KEYS.exerciseUnits, {})
   )
+  const activeWorkout = useState<ActiveWorkout>(
+    'active-workout',
+    () => normalizeActiveWorkout(readStorage<unknown>(STORAGE_KEYS.activeWorkout, null))
+  )
 
   if (import.meta.client) {
     // useState's initializer only runs on the server, so the client must
@@ -263,6 +312,7 @@ export const useWorkoutStorage = () => {
         language: readStorage<WorkoutSettings>(STORAGE_KEYS.settings, settings.value).language || 'en'
       }
       exerciseUnits.value = readStorage(STORAGE_KEYS.exerciseUnits, {})
+      activeWorkout.value = normalizeActiveWorkout(readStorage<unknown>(STORAGE_KEYS.activeWorkout, null))
     }
 
     watch(
@@ -283,6 +333,11 @@ export const useWorkoutStorage = () => {
       { deep: true }
     )
     watch(exerciseUnits, (value) => writeStorage(STORAGE_KEYS.exerciseUnits, value), { deep: true })
+    watch(activeWorkout, (value) => writeStorage(STORAGE_KEYS.activeWorkout, value), { deep: true })
+  }
+
+  const resetActiveWorkout = () => {
+    activeWorkout.value = createActiveWorkout()
   }
 
   const setLanguage = (language: WorkoutLanguage) => {
@@ -356,6 +411,7 @@ export const useWorkoutStorage = () => {
   const addWorkout = (workout: Omit<Workout, 'id'>) => {
     const nextWorkout: Workout = {
       ...workout,
+      exercises: workout.exercises.map(normalizeWorkoutExerciseNotes),
       id: `workout-${Date.now()}`,
       createdAt: workout.createdAt || new Date().toISOString()
     }
@@ -374,8 +430,9 @@ export const useWorkoutStorage = () => {
     const updatedWorkout: Workout = {
       ...existing,
       ...workout,
+      exercises: (workout.exercises ?? existing.exercises).map(normalizeWorkoutExerciseNotes),
       id: existing.id,
-      createdAt: existing.createdAt
+      createdAt: workout.createdAt ?? existing.createdAt
     }
     workouts.value[index] = updatedWorkout
     return updatedWorkout
@@ -430,6 +487,8 @@ export const useWorkoutStorage = () => {
     isTimedExercise,
     measurementLabel,
     setExerciseMeasurementUnit,
-    exerciseUnits
+    exerciseUnits,
+    activeWorkout,
+    resetActiveWorkout
   }
 }

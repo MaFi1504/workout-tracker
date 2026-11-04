@@ -14,6 +14,12 @@ export const normalizeExerciseName = (value: string) =>
 
 const exerciseNames = (exercise: Exercise) => [exercise.name, ...(exercise.aliases || [])]
 
+export const matchesExerciseSearch = (exercise: Pick<Exercise, 'name' | 'aliases' | 'tags'>, query: string) => {
+  const term = query.trim().toLowerCase()
+  return !term || [exercise.name, ...(exercise.aliases || []), ...exercise.tags]
+    .some((value) => value.toLowerCase().includes(term))
+}
+
 const tokenSimilarity = (left: string, right: string) => {
   const leftTokens = new Set(normalizeExerciseName(left).split(' '))
   const rightTokens = new Set(normalizeExerciseName(right).split(' '))

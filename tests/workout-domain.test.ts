@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { COMMON_WEIGHTS_KG, addRep, exerciseHistory, exerciseVolume, filterWorkouts, kgToLb, lbToKg, nextRoundSide, removeRep, updateRoundWeight, validateWorkout, workoutVolume } from '../domain/workout-domain'
+import { COMMON_WEIGHTS_KG, addRep, combineDateAndTime, exerciseHistory, exerciseVolume, filterWorkouts, kgToLb, lbToKg, localDateIso, localTimeIso, nextRoundSide, removeRep, updateRoundWeight, validateWorkout, workoutTime, workoutVolume } from '../domain/workout-domain'
 import type { Workout } from '../composables/useWorkoutStorage'
 
-const workout = (overrides: Partial<Workout> = {}): Workout => ({ id: 'workout-1', date: '2026-01-15', title: 'Upper body', notes: '', exercises: [{ id: 'workout-1-exercise', exerciseId: 'front-raise', order: 0, side: 'synchronized', rounds: [{ id: 'round-1', round: 1, weightKg: 5, reps: 10, side: 'both' }, { id: 'round-2', round: 2, weightKg: 6, reps: 8, side: 'both' }] }], ...overrides })
+const workout = (overrides: Partial<Workout> = {}): Workout => ({ id: 'workout-1', date: '2026-01-15', title: 'Upper body', notes: '', exercises: [{ id: 'workout-1-exercise', exerciseId: 'front-raise', order: 0, side: 'synchronized', notes: '', rounds: [{ id: 'round-1', round: 1, weightKg: 5, reps: 10, side: 'both' }, { id: 'round-2', round: 2, weightKg: 6, reps: 8, side: 'both' }] }], ...overrides })
+
+describe('workout date and time', () => {
+  it('combines a local date and time into a timestamp that round-trips', () => {
+    const createdAt = combineDateAndTime('2026-03-29', '01:30:15')
+    const timestamp = new Date(createdAt)
+    expect(localDateIso(timestamp)).toBe('2026-03-29')
+    expect(localTimeIso(timestamp)).toBe('01:30:15')
+    expect(workoutTime({ createdAt })).toBe('01:30:15')
+  })
+
+  it('accepts times without seconds and defaults missing times to midnight', () => {
+    expect(workoutTime({ createdAt: combineDateAndTime('2026-11-04', '18:05') })).toBe('18:05:00')
+    expect(workoutTime({ createdAt: combineDateAndTime('2026-11-04', '') })).toBe('00:00:00')
+    expect(workoutTime({})).toBe('00:00:00')
+    expect(workoutTime({ createdAt: 'not a date' })).toBe('00:00:00')
+  })
+
+  it('formats local dates with zero padding', () => expect(localDateIso(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05'))
+})
 
 describe('measurement tools', () => {
   it('offers quick-select weights', () => expect(COMMON_WEIGHTS_KG).toEqual([1, 3, 5, 8, 10]))
