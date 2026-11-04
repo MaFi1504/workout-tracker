@@ -25,6 +25,9 @@ describe('exercise measurement configuration', () => {
     expect(findMatchingExercise(playlistExercises, 'Pullups')?.id).toBe('pull-ups')
     expect(findMatchingExercise(playlistExercises, 'Close Grip Push Ups')?.id).toBe('diamond-push-ups')
     expect(findMatchingExercise(playlistExercises, 'Glute Bridge')?.id).toBe('glute-bridges')
+    expect(findMatchingExercise(playlistExercises, 'L-Raises')?.id).toBe('l-raises')
+    expect(findMatchingExercise(playlistExercises, 'Jumpingjacks')?.id).toBe('jumping-jacks')
+    expect(findMatchingExercise(playlistExercises, 'Front Steps')?.id).toBe('front-steps')
   })
 
   it('defaults static holds to seconds and dynamic movements to reps', () => {
