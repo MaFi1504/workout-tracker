@@ -28,6 +28,8 @@ describe('exercise measurement configuration', () => {
     expect(findMatchingExercise(playlistExercises, 'L-Raises')?.id).toBe('l-raises')
     expect(findMatchingExercise(playlistExercises, 'Jumpingjacks')?.id).toBe('jumping-jacks')
     expect(findMatchingExercise(playlistExercises, 'Front Steps')?.id).toBe('front-steps')
+    expect(findMatchingExercise(playlistExercises, 'Squat Abductions')?.id).toBe('squat-abductions')
+    expect(findMatchingExercise(playlistExercises, 'Squad Abductions')?.id).toBe('squat-abductions')
   })
 
   it('defaults static holds to seconds and dynamic movements to reps', () => {
