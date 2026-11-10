@@ -17,6 +17,8 @@ Workout inputs, summaries, and exercise analytics use the configured unit. Timed
 
 Each exercise within a workout has its own notes, separate from the workout's overall notes. Expand **Notes** beneath an exercise to add text; empty note sections start collapsed and existing notes open automatically. Notes are preserved in active drafts, saved workouts, loaded workout copies, and JSON exports. Older workouts and drafts receive an empty note without removing any workout data.
 
+Exercise cards in the active workout can be collapsed individually. Choose **Finish exercise** to mark a card finished and collapse it; finished cards can be expanded again or marked unfinished.
+
 If an exercise search has no matches, choose **Create and add** to save the typed name as a local custom exercise and immediately use it in the workout. This also works in the workout editor. New exercises default to the General tag, kilograms, and reps; further details can be changed later in the exercise library.
 
 ## Moving your history to openGym

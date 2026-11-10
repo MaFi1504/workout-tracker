@@ -16,6 +16,8 @@ const draftExercises = computed<WorkoutExercise[]>({
 })
 const activeInfoExerciseId = ref<string | null>(null)
 const hoveredInfoExerciseId = ref<string | null>(null)
+const collapsedDraftExerciseIds = ref(new Set<string>())
+const completedDraftExerciseIds = ref(new Set<string>())
 const form = computed(() => activeWorkout.value)
 
 const commonWeightsKg = [1, 3, 5, 8, 10] as const
@@ -55,6 +57,11 @@ const translations = {
     noPreviousPerformance: 'No previous performance',
     moveUp: 'Move exercise up',
     moveDown: 'Move exercise down',
+    collapseExercise: 'Collapse exercise',
+    expandExercise: 'Expand exercise',
+    finishExercise: 'Finish exercise',
+    markExerciseUnfinished: 'Mark exercise unfinished',
+    finished: 'Finished',
     addRound: 'Add round',
     remove: 'Remove',
     noExercises: 'Add exercises from the catalog to start this workout.',
@@ -111,6 +118,11 @@ const translations = {
     noPreviousPerformance: 'Keine vorherige Leistung',
     moveUp: 'Übung nach oben',
     moveDown: 'Übung nach unten',
+    collapseExercise: 'Übung einklappen',
+    expandExercise: 'Übung ausklappen',
+    finishExercise: 'Übung abschließen',
+    markExerciseUnfinished: 'Übung als nicht abgeschlossen markieren',
+    finished: 'Abgeschlossen',
     addRound: 'Runde hinzufügen',
     remove: 'Entfernen',
     noExercises: 'Füge Übungen aus dem Katalog hinzu, um das Training zu starten.',
@@ -277,6 +289,8 @@ const cloneWorkoutExercises = (workout: Workout) => workout.exercises
 
 const loadWorkout = (workout: Workout) => {
   draftExercises.value = cloneWorkoutExercises(workout)
+  collapsedDraftExerciseIds.value = new Set()
+  completedDraftExerciseIds.value = new Set()
   form.value.title = workout.title
   form.value.date = today()
   form.value.notes = workout.notes
@@ -349,6 +363,28 @@ const removeDraftExercise = (draftId: string) => {
   draftExercises.value = draftExercises.value
     .filter((exercise) => exercise.id !== draftId)
     .map((exercise, index) => ({ ...exercise, order: index }))
+  collapsedDraftExerciseIds.value.delete(draftId)
+  completedDraftExerciseIds.value.delete(draftId)
+}
+
+const isDraftExerciseCollapsed = (draftId: string) => collapsedDraftExerciseIds.value.has(draftId)
+const isDraftExerciseCompleted = (draftId: string) => completedDraftExerciseIds.value.has(draftId)
+
+const toggleDraftExerciseCollapsed = (draftId: string) => {
+  if (isDraftExerciseCollapsed(draftId)) {
+    collapsedDraftExerciseIds.value.delete(draftId)
+  } else {
+    collapsedDraftExerciseIds.value.add(draftId)
+  }
+}
+
+const toggleDraftExerciseCompleted = (draftId: string) => {
+  if (isDraftExerciseCompleted(draftId)) {
+    completedDraftExerciseIds.value.delete(draftId)
+  } else {
+    completedDraftExerciseIds.value.add(draftId)
+    collapsedDraftExerciseIds.value.add(draftId)
+  }
 }
 
 const createAndAddExercise = () => {
@@ -427,6 +463,8 @@ const handleAddWorkout = () => {
     notes: form.value.notes
   })
 
+  collapsedDraftExerciseIds.value = new Set()
+  completedDraftExerciseIds.value = new Set()
   resetActiveWorkout()
 }
 </script>
@@ -511,7 +549,12 @@ const handleAddWorkout = () => {
             </label>
 
             <div v-if="draftExercises.length" class="draft-exercise-list">
-              <article v-for="exercise in draftExercises" :key="exercise.id" class="draft-exercise">
+              <article
+                v-for="exercise in draftExercises"
+                :key="exercise.id"
+                class="draft-exercise"
+                :class="{ collapsed: isDraftExerciseCollapsed(exercise.id), completed: isDraftExerciseCompleted(exercise.id) }"
+              >
                 <div class="draft-exercise-header">
                   <div class="draft-exercise-title">
                     <div class="exercise-name-with-info">
@@ -540,8 +583,21 @@ const handleAddWorkout = () => {
                       </span>
                     </div>
                     <span>{{ t.rounds }}: {{ exercise.rounds.length }}</span>
+                    <span v-if="isDraftExerciseCompleted(exercise.id)" class="exercise-completed-label">{{ t.finished }}</span>
                   </div>
                   <div class="draft-exercise-actions">
+                    <button
+                      type="button"
+                      class="icon-button"
+                      :aria-label="isDraftExerciseCollapsed(exercise.id) ? t.expandExercise : t.collapseExercise"
+                      :title="isDraftExerciseCollapsed(exercise.id) ? t.expandExercise : t.collapseExercise"
+                      :aria-expanded="!isDraftExerciseCollapsed(exercise.id)"
+                      @click="toggleDraftExerciseCollapsed(exercise.id)"
+                    >
+                      <svg class="exercise-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path :d="isDraftExerciseCollapsed(exercise.id) ? 'm6 9 6 6 6-6' : 'm6 15 6-6 6 6'" />
+                      </svg>
+                    </button>
                     <button
                       type="button"
                       class="icon-button"
@@ -550,7 +606,9 @@ const handleAddWorkout = () => {
                       :title="t.moveUp"
                       @click="moveDraftExercise(exercise.id, -1)"
                     >
-                      <span aria-hidden="true">↑</span>
+                      <svg class="exercise-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M12 19V5m-6 6 6-6 6 6" />
+                      </svg>
                     </button>
                     <button
                       type="button"
@@ -560,7 +618,9 @@ const handleAddWorkout = () => {
                       :title="t.moveDown"
                       @click="moveDraftExercise(exercise.id, 1)"
                     >
-                      <span aria-hidden="true">↓</span>
+                      <svg class="exercise-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M12 5v14m-6-6 6 6 6-6" />
+                      </svg>
                     </button>
                     <button
                       type="button"
@@ -576,104 +636,114 @@ const handleAddWorkout = () => {
                   </div>
                 </div>
 
-                <p v-if="previousPerformance(exercise.exerciseId)" class="previous-performance">
-                  {{ t.previousPerformance }}:
-                  {{ previousPerformance(exercise.exerciseId)?.date }} ·
-                  {{ previousPerformance(exercise.exerciseId)?.summary }}
-                </p>
-                <p v-else class="previous-performance muted">{{ t.noPreviousPerformance }}</p>
+                <template v-if="!isDraftExerciseCollapsed(exercise.id)">
+                  <p v-if="previousPerformance(exercise.exerciseId)" class="previous-performance">
+                    {{ t.previousPerformance }}:
+                    {{ previousPerformance(exercise.exerciseId)?.date }} ·
+                    {{ previousPerformance(exercise.exerciseId)?.summary }}
+                  </p>
+                  <p v-else class="previous-performance muted">{{ t.noPreviousPerformance }}</p>
 
-                <div class="round-list">
-                  <div v-for="round in exercise.rounds" :key="round.id" class="round-row">
-                    <div class="round-info">
-                      <span class="round-label">{{ t.round }} {{ round.round }}</span>
-                      <label>
-                        {{ t.weight }} (kg)
-                        <input
-                          :value="roundWeightLabel(round)"
-                          type="text"
-                          readonly
-                          class="weight-trigger"
-                          :aria-label="t.weightDialog"
-                          @click="openWeightDialog(round)"
-                          @keydown.enter="openWeightDialog(round)"
-                        />
-                      </label>
-                    </div>
-                    <div class="round-measurement reps-measurement">
-                      <span class="measurement-label">{{ measurementLabel(exercise.exerciseId) }}</span>
-                      <div class="rep-controls">
-                        <button
-                          type="button"
-                          class="icon-button counter-button"
-                          :aria-label="isTimedExercise(exercise.exerciseId) ? t.decreaseSecond : t.decreaseRep"
-                          :title="isTimedExercise(exercise.exerciseId) ? t.decreaseSecond : t.decreaseRep"
-                          @click="decrementReps(round)"
-                        >
-                          −
-                        </button>
-                        <input
-                          v-model.number="round.reps"
-                          type="text"
-                          inputmode="numeric"
-                          pattern="[0-9]*"
-                          class="rep-count-input"
-                          :aria-label="measurementLabel(exercise.exerciseId)"
-                          @change="normalizeReps(round)"
-                        />
-                        <button
-                          type="button"
-                          class="icon-button counter-button"
-                          :aria-label="isTimedExercise(exercise.exerciseId) ? t.increaseSecond : t.increaseRep"
-                          :title="isTimedExercise(exercise.exerciseId) ? t.increaseSecond : t.increaseRep"
-                          @click="incrementReps(round)"
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          class="icon-button mode-toggle"
-                          :class="[`side-${round.side || 'both'}`, { synchronized: (round.side || 'both') === 'both' }]"
-                          :aria-label="sideLabel(round)"
-                          :title="sideLabel(round)"
-                          @click="toggleRoundMode(exercise, round)"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                            <g v-if="(round.side || 'both') === 'left'">
-                              <circle cx="8" cy="6" r="2" />
-                              <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
-                            </g>
-                            <g v-else-if="round.side === 'right'">
-                              <circle cx="16" cy="6" r="2" />
-                              <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
-                            </g>
-                            <g v-else>
-                              <circle cx="8" cy="6" r="2" />
-                              <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
-                              <circle cx="16" cy="6" r="2" />
-                              <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
-                            </g>
-                          </svg>
-                        </button>
+                  <div class="round-list">
+                    <div v-for="round in exercise.rounds" :key="round.id" class="round-row">
+                      <div class="round-info">
+                        <span class="round-label">{{ t.round }} {{ round.round }}</span>
+                        <label>
+                          {{ t.weight }} (kg)
+                          <input
+                            :value="roundWeightLabel(round)"
+                            type="text"
+                            readonly
+                            class="weight-trigger"
+                            :aria-label="t.weightDialog"
+                            @click="openWeightDialog(round)"
+                            @keydown.enter="openWeightDialog(round)"
+                          />
+                        </label>
                       </div>
+                      <div class="round-measurement reps-measurement">
+                        <span class="measurement-label">{{ measurementLabel(exercise.exerciseId) }}</span>
+                        <div class="rep-controls">
+                          <button
+                            type="button"
+                            class="icon-button counter-button"
+                            :aria-label="isTimedExercise(exercise.exerciseId) ? t.decreaseSecond : t.decreaseRep"
+                            :title="isTimedExercise(exercise.exerciseId) ? t.decreaseSecond : t.decreaseRep"
+                            @click="decrementReps(round)"
+                          >
+                            −
+                          </button>
+                          <input
+                            v-model.number="round.reps"
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            class="rep-count-input"
+                            :aria-label="measurementLabel(exercise.exerciseId)"
+                            @change="normalizeReps(round)"
+                          />
+                          <button
+                            type="button"
+                            class="icon-button counter-button"
+                            :aria-label="isTimedExercise(exercise.exerciseId) ? t.increaseSecond : t.increaseRep"
+                            :title="isTimedExercise(exercise.exerciseId) ? t.increaseSecond : t.increaseRep"
+                            @click="incrementReps(round)"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            class="icon-button mode-toggle"
+                            :class="[`side-${round.side || 'both'}`, { synchronized: (round.side || 'both') === 'both' }]"
+                            :aria-label="sideLabel(round)"
+                            :title="sideLabel(round)"
+                            @click="toggleRoundMode(exercise, round)"
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                              <g v-if="(round.side || 'both') === 'left'">
+                                <circle cx="8" cy="6" r="2" />
+                                <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
+                              </g>
+                              <g v-else-if="round.side === 'right'">
+                                <circle cx="16" cy="6" r="2" />
+                                <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
+                              </g>
+                              <g v-else>
+                                <circle cx="8" cy="6" r="2" />
+                                <path d="M8 9v6M5 12h6M8 15l-2 5M8 15l2 5" />
+                                <circle cx="16" cy="6" r="2" />
+                                <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
+                              </g>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="icon-button remove-button"
+                        :aria-label="`${t.remove} ${t.round} ${round.round}`"
+                        @click="removeRound(exercise, round.id)"
+                      >
+                        <svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      class="icon-button remove-button"
-                      :aria-label="`${t.remove} ${t.round} ${round.round}`"
-                      @click="removeRound(exercise, round.id)"
-                    >
-                      <svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <path d="M6 6l12 12M18 6L6 18" />
-                      </svg>
-                    </button>
                   </div>
-                </div>
 
-                <button type="button" class="secondary-button" @click="addRound(exercise)">
-                  {{ t.addRound }}
-                </button>
-                <ExerciseNotes v-model="exercise.notes" :label="t.notes" />
+                  <button type="button" class="secondary-button" @click="addRound(exercise)">
+                    {{ t.addRound }}
+                  </button>
+                  <ExerciseNotes v-model="exercise.notes" :label="t.notes" />
+                  <button
+                    type="button"
+                    class="secondary-button exercise-completion-button"
+                    :class="{ 'exercise-completion-button-done': isDraftExerciseCompleted(exercise.id) }"
+                    @click="toggleDraftExerciseCompleted(exercise.id)"
+                  >
+                    {{ isDraftExerciseCompleted(exercise.id) ? t.markExerciseUnfinished : t.finishExercise }}
+                  </button>
+                </template>
               </article>
             </div>
 
@@ -880,6 +950,15 @@ p {
   background: #f8fafc;
 }
 
+.draft-exercise.completed {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.draft-exercise.collapsed {
+  gap: 0;
+}
+
 .draft-exercise-header,
 .round-row {
   display: flex;
@@ -897,10 +976,39 @@ p {
   gap: 0.35rem;
 }
 
+.exercise-action-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .draft-exercise-title,
 .round-row label {
   display: grid;
   gap: 0.25rem;
+}
+
+.exercise-completed-label {
+  justify-self: start;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534 !important;
+  font-size: 0.75rem !important;
+  font-weight: 600;
+}
+
+.exercise-completion-button {
+  justify-self: start;
+}
+
+.exercise-completion-button-done {
+  background: #dcfce7;
+  color: #166534;
 }
 
 .exercise-name-with-info {
