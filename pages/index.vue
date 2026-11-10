@@ -71,6 +71,7 @@ const translations = {
     weight: 'Weight',
     notes: 'Notes',
     quickWeights: 'Quick weights',
+    bodyweight: 'Bodyweight',
     weightDialog: 'Select weight',
     currentWeight: 'Current weight',
     apply: 'Apply weight',
@@ -134,6 +135,7 @@ const translations = {
     weight: 'Gewicht',
     notes: 'Notizen',
     quickWeights: 'Schnellgewichte',
+    bodyweight: 'Körpergewicht',
     weightDialog: 'Gewicht auswählen',
     currentWeight: 'Aktuelles Gewicht',
     apply: 'Gewicht übernehmen',
@@ -756,18 +758,20 @@ const handleAddWorkout = () => {
                     </div>
                   </div>
 
-                  <button type="button" class="secondary-button" @click="addRound(exercise)">
-                    {{ t.addRound }}
-                  </button>
+                  <div class="draft-exercise-round-actions">
+                    <button type="button" class="secondary-button" @click="addRound(exercise)">
+                      {{ t.addRound }}
+                    </button>
+                    <button
+                      type="button"
+                      class="secondary-button exercise-completion-button"
+                      :class="{ 'exercise-completion-button-done': isDraftExerciseCompleted(exercise.id) }"
+                      @click="toggleDraftExerciseCompleted(exercise.id)"
+                    >
+                      {{ isDraftExerciseCompleted(exercise.id) ? t.markExerciseUnfinished : t.finishExercise }}
+                    </button>
+                  </div>
                   <ExerciseNotes v-model="exercise.notes" :label="t.notes" />
-                  <button
-                    type="button"
-                    class="secondary-button exercise-completion-button"
-                    :class="{ 'exercise-completion-button-done': isDraftExerciseCompleted(exercise.id) }"
-                    @click="toggleDraftExerciseCompleted(exercise.id)"
-                  >
-                    {{ isDraftExerciseCompleted(exercise.id) ? t.markExerciseUnfinished : t.finishExercise }}
-                  </button>
                 </template>
               </article>
             </div>
@@ -836,6 +840,15 @@ const handleAddWorkout = () => {
           </label>
 
           <div class="dialog-presets" :aria-label="t.quickWeights">
+            <button
+              type="button"
+              class="weight-preset bodyweight-preset"
+              :class="{ selected: weightDialogValue === 0 && weightDialogCount === 1 }"
+              @click="weightDialogValue = 0; weightDialogCount = 1"
+            >
+              <span>{{ t.bodyweight }}</span>
+              <span>0 kg</span>
+            </button>
             <button
               v-for="weight in commonWeightsKg"
               :key="weight"
@@ -1027,8 +1040,10 @@ p {
   font-weight: 600;
 }
 
-.exercise-completion-button {
-  justify-self: start;
+.draft-exercise-round-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .exercise-completion-button-done {
@@ -1151,6 +1166,21 @@ p {
   background: white;
   color: #334155;
   cursor: pointer;
+}
+
+.bodyweight-preset {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 0.75rem;
+  font-weight: 600;
+}
+
+.bodyweight-preset span:last-child {
+  color: #64748b;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .weight-preset.selected {
