@@ -84,6 +84,8 @@ const translations = {
     sideBoth: 'Both sides',
     sideLeft: 'Left side',
     sideRight: 'Right side',
+    sideAlternating: 'Alternating sides',
+    repsPerSide: 'Reps per side',
     exerciseInfo: 'Exercise description',
     save: 'Save workout',
     englishLabel: 'English'
@@ -145,6 +147,8 @@ const translations = {
     sideBoth: 'Beide Seiten',
     sideLeft: 'Linke Seite',
     sideRight: 'Rechte Seite',
+    sideAlternating: 'Abwechselnde Seiten',
+    repsPerSide: 'Wiederholungen pro Seite',
     exerciseInfo: 'Übungsbeschreibung',
     save: 'Training speichern',
     englishLabel: 'Deutsch'
@@ -172,7 +176,13 @@ const exerciseName = (exerciseId: string) =>
   availableExercises.value.find((exercise) => exercise.id === exerciseId)?.name || exerciseId
 
 const roundSummary = (exercise: WorkoutExercise) =>
-  exercise.rounds.map((round) => `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg x ${round.reps} ${measurementLabel(exercise.exerciseId)}`).join(' · ')
+  exercise.rounds.map((round) => {
+    const measurement = round.side === 'alternating' && !isTimedExercise(exercise.exerciseId)
+      ? t.value.repsPerSide
+      : measurementLabel(exercise.exerciseId)
+    const alternating = round.side === 'alternating' ? ` (${t.value.sideAlternating})` : ''
+    return `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg x ${round.reps} ${measurement}${alternating}`
+  }).join(' · ')
 
 const roundWeightLabel = (round: RoundEntry) =>
   `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg`
@@ -259,8 +269,19 @@ const showExerciseInfo = (exerciseId: string) =>
 
 const sideLabel = (round: RoundEntry) => {
   const side = round.side || 'both'
-  return side === 'both' ? t.value.sideBoth : side === 'left' ? t.value.sideLeft : t.value.sideRight
+  return side === 'both'
+    ? t.value.sideBoth
+    : side === 'left'
+      ? t.value.sideLeft
+      : side === 'right'
+        ? t.value.sideRight
+        : t.value.sideAlternating
 }
+
+const roundMeasurementLabel = (exerciseId: string, round: RoundEntry) =>
+  round.side === 'alternating' && !isTimedExercise(exerciseId)
+    ? t.value.repsPerSide
+    : measurementLabel(exerciseId)
 
 const latestWorkoutExercise = (exerciseId: string) => workouts.value
   .flatMap((workout) => workout.exercises
@@ -419,7 +440,7 @@ const addRound = (exercise: WorkoutExercise) => {
     weightKg: previousRound?.weightKg || 0,
     weightCount: previousRound?.weightCount || 1,
     reps: previousRound?.reps || 10,
-    side: exercise.side === 'single' ? undefined : 'both'
+    side: previousRound?.side ?? (exercise.side === 'single' ? undefined : 'both')
   })
 }
 
@@ -662,7 +683,7 @@ const handleAddWorkout = () => {
                         </label>
                       </div>
                       <div class="round-measurement reps-measurement">
-                        <span class="measurement-label">{{ measurementLabel(exercise.exerciseId) }}</span>
+                        <span class="measurement-label">{{ roundMeasurementLabel(exercise.exerciseId, round) }}</span>
                         <div class="rep-controls">
                           <button
                             type="button"
@@ -679,7 +700,7 @@ const handleAddWorkout = () => {
                             inputmode="numeric"
                             pattern="[0-9]*"
                             class="rep-count-input"
-                            :aria-label="measurementLabel(exercise.exerciseId)"
+                            :aria-label="roundMeasurementLabel(exercise.exerciseId, round)"
                             @change="normalizeReps(round)"
                           />
                           <button
@@ -707,6 +728,10 @@ const handleAddWorkout = () => {
                               <g v-else-if="round.side === 'right'">
                                 <circle cx="16" cy="6" r="2" />
                                 <path d="M16 9v6M13 12h6M16 15l-2 5M16 15l2 5" />
+                              </g>
+                              <g v-else-if="round.side === 'alternating'">
+                                <circle cx="12" cy="5" r="2" />
+                                <path d="M12 8v7m-3-4h6m-3 4-2 5m2-5 2 5M3 8h5m-2-2 2 2-2 2M21 16h-5m2-2-2 2 2 2" />
                               </g>
                               <g v-else>
                                 <circle cx="8" cy="6" r="2" />
@@ -1168,6 +1193,12 @@ p {
   border-color: #4f46e5;
   background: #e0e7ff;
   color: #312e81;
+}
+
+.mode-toggle.side-alternating {
+  border-color: #7c3aed;
+  background: #f3e8ff;
+  color: #6b21a8;
 }
 
 .mode-toggle svg {

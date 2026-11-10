@@ -39,7 +39,7 @@ export interface RoundEntry {
   weightCount?: 1 | 2
   // Repetitions or seconds, according to the exercise's measurement unit.
   reps: number
-  side?: 'left' | 'right' | 'both'
+  side?: 'left' | 'right' | 'both' | 'alternating'
 }
 
 export interface WorkoutExercise {

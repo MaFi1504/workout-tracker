@@ -19,8 +19,8 @@ const newExerciseId = ref('')
 const returnPath = computed(() => route.query.from === 'analytics' ? '/analytics' : '/')
 
 const translations = {
-  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', loadWorkout: 'Load as new workout', delete: 'Delete workout', confirmDelete: 'Are you sure you want to delete this workout?', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', time: 'Time', notFound: 'Workout not found.', saved: 'Changes saved.', weightDialog: 'Select weight', currentWeight: 'Current weight', quickWeights: 'Quick weights', apply: 'Apply weight', exercise: 'Exercise', addExercise: 'Add exercise', selectExercise: 'Select exercise', removeExercise: 'Remove exercise', addRound: 'Add round', removeRound: 'Remove round', confirmRemoveExercise: 'Remove this exercise from the workout?', searchExercise: 'Type to search exercises…', noResults: 'No matching exercises' },
-  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', loadWorkout: 'Als neues Training laden', delete: 'Training löschen', confirmDelete: 'Möchtest du dieses Training wirklich löschen?', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', time: 'Uhrzeit', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.', weightDialog: 'Gewicht auswählen', currentWeight: 'Aktuelles Gewicht', quickWeights: 'Schnellgewichte', apply: 'Gewicht übernehmen', exercise: 'Übung', addExercise: 'Übung hinzufügen', selectExercise: 'Übung auswählen', removeExercise: 'Übung entfernen', addRound: 'Runde hinzufügen', removeRound: 'Runde entfernen', confirmRemoveExercise: 'Diese Übung aus dem Training entfernen?', searchExercise: 'Übung suchen…', noResults: 'Keine passenden Übungen' }
+  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', loadWorkout: 'Load as new workout', delete: 'Delete workout', confirmDelete: 'Are you sure you want to delete this workout?', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', repsPerSide: 'reps per side', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', time: 'Time', notFound: 'Workout not found.', saved: 'Changes saved.', weightDialog: 'Select weight', currentWeight: 'Current weight', quickWeights: 'Quick weights', apply: 'Apply weight', exercise: 'Exercise', addExercise: 'Add exercise', selectExercise: 'Select exercise', removeExercise: 'Remove exercise', addRound: 'Add round', removeRound: 'Remove round', confirmRemoveExercise: 'Remove this exercise from the workout?', searchExercise: 'Type to search exercises…', noResults: 'No matching exercises', alternating: 'alternating' },
+  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', loadWorkout: 'Als neues Training laden', delete: 'Training löschen', confirmDelete: 'Möchtest du dieses Training wirklich löschen?', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', repsPerSide: 'Wiederholungen pro Seite', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', time: 'Uhrzeit', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.', weightDialog: 'Gewicht auswählen', currentWeight: 'Aktuelles Gewicht', quickWeights: 'Schnellgewichte', apply: 'Gewicht übernehmen', exercise: 'Übung', addExercise: 'Übung hinzufügen', selectExercise: 'Übung auswählen', removeExercise: 'Übung entfernen', addRound: 'Runde hinzufügen', removeRound: 'Runde entfernen', confirmRemoveExercise: 'Diese Übung aus dem Training entfernen?', searchExercise: 'Übung suchen…', noResults: 'Keine passenden Übungen', alternating: 'abwechselnd' }
 } as const
 const t = computed(() => translations[settings.value.language])
 const availableExercises = computed(() => [...seedExercises.value, ...customExercises.value])
@@ -77,7 +77,7 @@ const addRound = (exercise: WorkoutExercise) => {
     weightKg: previousRound?.weightKg || 0,
     weightCount: previousRound?.weightCount || 1,
     reps: previousRound?.reps || 10,
-    side: exercise.side === 'single' ? undefined : 'both'
+    side: previousRound?.side ?? (exercise.side === 'single' ? undefined : 'both')
   })
 }
 const removeRound = (exercise: WorkoutExercise, roundId: string) => {
@@ -129,7 +129,13 @@ const remove = async () => {
     await navigateTo(returnPath.value)
   }
 }
-const roundLabel = (round: RoundEntry, exerciseId: string) => `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg × ${round.reps} ${measurementLabel(exerciseId)}`
+const roundLabel = (round: RoundEntry, exerciseId: string) => {
+  const measurement = round.side === 'alternating' && !isTimedExercise(exerciseId)
+    ? t.value.repsPerSide
+    : measurementLabel(exerciseId)
+  const alternating = round.side === 'alternating' ? ` (${t.value.alternating})` : ''
+  return `${round.weightCount === 2 ? '2×' : ''}${round.weightKg} kg × ${round.reps} ${measurement}${alternating}`
+}
 const openWeightDialog = (round: RoundEntry) => {
   weightDialogRound.value = round
   weightDialogValue.value = round.weightKg

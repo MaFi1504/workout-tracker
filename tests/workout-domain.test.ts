@@ -27,10 +27,11 @@ describe('measurement tools', () => {
   it('offers quick-select weights', () => expect(COMMON_WEIGHTS_KG).toEqual([1, 3, 5, 8, 10]))
   it('converts kg to lb and back using kg as canonical value', () => { expect(kgToLb(5)).toBeCloseTo(11.0231, 3); expect(lbToKg(kgToLb(5))).toBeCloseTo(5, 10) })
   it('increments reps and corrects the last count', () => { expect(addRep(9)).toBe(10); expect(removeRep(10)).toBe(9); expect(removeRep(0)).toBe(0) })
-  it('cycles round side selection from both to left to right and back', () => {
+  it('cycles round side selection from both to left to right to alternating and back', () => {
     expect(nextRoundSide()).toBe('left')
     expect(nextRoundSide('left')).toBe('right')
-    expect(nextRoundSide('right')).toBe('both')
+    expect(nextRoundSide('right')).toBe('alternating')
+    expect(nextRoundSide('alternating')).toBe('both')
   })
 })
 
@@ -48,6 +49,16 @@ describe('workout records', () => {
   })
   it('preserves round measurements and calculates nested volume', () => { const entry = workout(); expect(entry.exercises[0]?.rounds.map(({ weightKg, reps }) => ({ weightKg, reps }))).toEqual([{ weightKg: 5, reps: 10 }, { weightKg: 6, reps: 8 }]); expect(exerciseVolume(entry.exercises[0]!)).toBe(98); expect(workoutVolume(entry)).toBe(98) })
   it('counts paired weights for synchronized rounds', () => { const entry = workout(); entry.exercises[0]!.rounds = [{ id: 'paired', round: 1, weightKg: 5, weightCount: 2, reps: 10, side: 'both' }]; expect(exerciseVolume(entry.exercises[0]!)).toBe(100) })
+  it('counts alternating reps for both sides in volume while keeping entered reps per side', () => {
+    const entry = workout()
+    entry.exercises[0]!.rounds = [{ id: 'alternating', round: 1, weightKg: 5, reps: 5, side: 'alternating' }]
+    expect(exerciseVolume(entry.exercises[0]!)).toBe(50)
+    expect(workoutVolume(entry)).toBe(50)
+    expect(exerciseHistory([entry], 'front-raise').map((point) => point.volume)).toEqual([50])
+    expect(entry.exercises[0]!.rounds[0]!.reps).toBe(5)
+    expect(validateWorkout(entry)).toBe(true)
+    expect(exerciseVolume(entry.exercises[0]!, 'seconds')).toBe(0)
+  })
   it('updates following round weights and weight counts from round one', () => {
     const rounds = workout().exercises[0]!.rounds
     expect(updateRoundWeight(rounds, 0, 8, 2).map(({ weightKg, weightCount }) => ({ weightKg, weightCount }))).toEqual([{ weightKg: 8, weightCount: 2 }, { weightKg: 8, weightCount: 2 }])

@@ -59,6 +59,14 @@ describe('openGym CSV export', () => {
     expect(csv).toContain(',4,normal,,0,kg,0,,,Exercise notes\r\n')
   })
 
+  it('exports alternating reps as total reps and records the per-side entry in notes', () => {
+    const source = workout()
+    source.exercises[0]!.rounds = [{ id: 'alternate', round: 1, weightKg: 5, reps: 5, side: 'alternating' }]
+    const csv = exportOpenGymCsv([source], catalog)
+    expect(csv).toContain('Squat, round 1: 5 reps per side (alternating)')
+    expect(csv).toContain(',Squat,,1,normal,,5,kg,10,,,Exercise notes\r\n')
+  })
+
   it('quotes commas, quotes, newlines and Unicode, and neutralizes spreadsheet formulas', () => {
     const source = workout({ title: '=Formula', notes: 'Good, "great"\nWeiter üben' })
     source.exercises[0]!.notes = '@note'

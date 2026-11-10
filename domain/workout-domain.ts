@@ -8,9 +8,9 @@ export const lbToKg = (weightLb: number) => weightLb * KG_PER_LB
 export const addRep = (reps: number) => Math.max(0, reps) + 1
 export const removeRep = (reps: number) => Math.max(0, reps - 1)
 export const nextRoundSide = (side: RoundEntry['side'] = 'both'): NonNullable<RoundEntry['side']> =>
-  side === 'both' ? 'left' : side === 'left' ? 'right' : 'both'
+  side === 'both' ? 'left' : side === 'left' ? 'right' : side === 'right' ? 'alternating' : 'both'
 export const roundVolume = (round: RoundEntry, unit: ExerciseMeasurementUnit = 'reps') =>
-  unit === 'seconds' ? 0 : round.weightKg * (round.weightCount || 1) * round.reps
+  unit === 'seconds' ? 0 : round.weightKg * (round.weightCount || 1) * round.reps * (round.side === 'alternating' ? 2 : 1)
 export const exerciseVolume = (exercise: WorkoutExercise, unit: ExerciseMeasurementUnit = 'reps') =>
   unit === 'seconds' ? 0 : exercise.rounds.reduce((total, round) => total + roundVolume(round), 0)
 export const workoutVolume = (workout: Workout, catalog: Pick<Exercise, 'id' | 'measurementUnit'>[] = []) =>
@@ -36,7 +36,7 @@ export const combineDateAndTime = (date: string, time: string) => {
 
 export const validateWorkout = (workout: Omit<Workout, 'id'> | Workout) => {
   if (!workout.date || !workout.title.trim() || !workout.exercises.length) return false
-  return workout.exercises.every((exercise, exerciseIndex) => exercise.order === exerciseIndex && exercise.rounds.length > 0 && exercise.rounds.every((round, roundIndex) => round.round === roundIndex + 1 && Number.isFinite(round.weightKg) && round.weightKg >= 0 && (round.weightCount === undefined || round.weightCount === 1 || round.weightCount === 2) && Number.isInteger(round.reps) && round.reps >= 0 && (round.side === 'left' || round.side === 'right' || round.side === 'both')))
+  return workout.exercises.every((exercise, exerciseIndex) => exercise.order === exerciseIndex && exercise.rounds.length > 0 && exercise.rounds.every((round, roundIndex) => round.round === roundIndex + 1 && Number.isFinite(round.weightKg) && round.weightKg >= 0 && (round.weightCount === undefined || round.weightCount === 1 || round.weightCount === 2) && Number.isInteger(round.reps) && round.reps >= 0 && (round.side === 'left' || round.side === 'right' || round.side === 'both' || round.side === 'alternating')))
 }
 
 export interface ExerciseHistoryPoint { workoutId: string; date: string; round: number; weightKg: number; reps: number; volume: number; side?: RoundEntry['side'] }

@@ -11,6 +11,8 @@ Exercise searches in the library, active workout, and workout editor match names
 
 Select an exercise in the exercise library to change its measurement unit between reps and time (seconds). Custom exercises also offer this option when creating or editing them. Plank, Side Plank, and DB V Crunch Holds default to seconds. Preferences are saved locally and included in JSON exports.
 
+Each round can be recorded for both sides, the left or right side, or alternating sides. For alternating rounds, enter reps per side; volume calculations count both sides (for example, 5 reps at 5 kg contributes 50 kg of volume). Timed holds are not doubled.
+
 Workout inputs, summaries, and exercise analytics use the configured unit. Timed holds are excluded from rep totals and lifting-volume calculations. Selecting a timed exercise in analytics shows its duration trends instead. Existing round values are preserved when changing a unit; they are interpreted in the newly selected unit, not converted.
 
 ## Exercise notes
@@ -29,6 +31,7 @@ The export uses openGym's native CSV format, with one row per saved round, expli
 
 - Two weights (for example, `2 × 8 kg`) become the combined load (`16 kg`) to preserve lifting volume; the original weight configuration is retained in workout notes.
 - Left/right rep sets use openGym's side field. Timed sets retain seconds, with their side recorded in workout notes because openGym does not support timed per-side sets.
+- Alternating rep sets export the total reps across both sides, with the original per-side count noted in workout notes.
 - Workouts sharing a date, start minute, and title receive their original ID in the exported title so openGym does not merge them. Date-only legacy workouts use midnight. Workout end times are unknown and left blank.
 - Exercise notes longer than openGym's 280-character limit are also copied into workout notes. Source and workout type, when present, are retained there too.
 - openGym combines repeated entries for the same exercise within a workout and skips sets with zero weight and zero reps/seconds (and consequently workouts containing only those sets). Its importer also rejects invalid dates and out-of-range measurements; check its preview before confirming.

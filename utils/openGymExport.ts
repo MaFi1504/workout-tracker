@@ -36,8 +36,11 @@ export const exportOpenGymCsv = (workouts: Workout[], catalog: Exercise[]): stri
       for (const round of entry.rounds) {
         const details: string[] = []
         if (round.weightCount === 2) details.push(`2 x ${round.weightKg} kg (combined load exported)`)
-        // openGym's per-side sets only support reps, not timed holds.
-        if (exercise?.measurementUnit === 'seconds' && round.side && round.side !== 'both') {
+        const timed = exercise?.measurementUnit === 'seconds'
+        if (round.side === 'alternating') {
+          details.push(timed ? 'alternating sides' : `${round.reps} reps per side (alternating)`)
+        } else if (timed && round.side && round.side !== 'both') {
+          // openGym's per-side sets only support reps, not timed holds.
           details.push(`${round.side} side`)
         }
         if (details.length) extraNotes.push(`${name}, round ${round.round}: ${details.join('; ')}`)
@@ -54,10 +57,11 @@ export const exportOpenGymCsv = (workouts: Workout[], catalog: Exercise[]): stri
       const exercise = exercises.get(entry.exerciseId)
       const timed = exercise?.measurementUnit === 'seconds'
       for (const round of entry.rounds) {
+        const reps = round.reps * (round.side === 'alternating' ? 2 : 1)
         rows.push([
           workout.date, start, '', title, notes, exercise?.name || entry.exerciseId, '',
           round.round, 'normal', !timed && round.side === 'left' ? 'L' : !timed && round.side === 'right' ? 'R' : '',
-          round.weightKg * (round.weightCount || 1), 'kg', timed ? '' : round.reps, '',
+          round.weightKg * (round.weightCount || 1), 'kg', timed ? '' : reps, '',
           timed ? round.reps : '', entry.notes || ''
         ])
       }
