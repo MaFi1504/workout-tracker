@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { parseWorkoutNotes } from '~/utils/workoutImport'
 import { findMatchingExercise } from '~/utils/exerciseMatching'
+import { exportOpenGymCsv } from '~/utils/openGymExport'
 
 const { settings, customExercises, workouts, seedExercises, addExercise, addWorkout, exerciseUnits, measurementLabel } = useWorkoutStorage()
 
@@ -76,6 +77,18 @@ const importWorkout = () => {
   importText.notes = ''
 }
 
+const downloadFile = (data: string, type: string, extension: string, prefix = 'workout-tracker') => {
+  const blob = new Blob([data], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const date = new Date().toISOString().slice(0, 10)
+
+  link.href = url
+  link.download = `${prefix}-${date}.${extension}`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 const exportWorkoutData = () => {
   const exportPayload = {
     version: 1,
@@ -84,16 +97,11 @@ const exportWorkoutData = () => {
     customExercises: customExercises.value,
     exerciseUnits: exerciseUnits.value
   }
-  const data = JSON.stringify(exportPayload, null, 2)
-  const blob = new Blob([data], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  const date = new Date().toISOString().slice(0, 10)
+  downloadFile(JSON.stringify(exportPayload, null, 2), 'application/json', 'json')
+}
 
-  link.href = url
-  link.download = `workout-tracker-${date}.json`
-  link.click()
-  URL.revokeObjectURL(url)
+const exportOpenGymData = () => {
+  downloadFile(exportOpenGymCsv(workouts.value, availableExercises.value), 'text/csv;charset=utf-8', 'csv', 'workout-tracker-opengym')
 }
 
 const translations = {
@@ -123,6 +131,10 @@ const translations = {
     exportData: 'Export workout data',
     exportDescription: 'Download your workouts and custom exercise catalog as a JSON file.',
     downloadJson: 'Download JSON',
+    exportOpenGym: 'Move to openGym',
+    openGymDescription: 'Export saved workouts, sets, weights, reps, seconds and notes. In openGym, select Settings → Data & backup → Import from another app and choose this CSV.',
+    openGymLimits: 'Two weights are exported as their combined load. Timed-set sides are kept in workout notes. openGym combines repeated exercises and skips zero-only sets; review its import preview. Also keep a JSON backup for the complete original data.',
+    downloadOpenGym: 'Download openGym CSV',
     comingSoon: 'More tools can be added here as the training workflow grows.'
   },
   de: {
@@ -151,6 +163,10 @@ const translations = {
     exportData: 'Trainingsdaten exportieren',
     exportDescription: 'Lade deine Trainings und eigene Übungen als JSON-Datei herunter.',
     downloadJson: 'JSON herunterladen',
+    exportOpenGym: 'Zu openGym wechseln',
+    openGymDescription: 'Exportiere gespeicherte Trainings, Sätze, Gewichte, Wiederholungen, Sekunden und Notizen. Wähle in openGym Settings → Data & backup → Import from another app und öffne diese CSV.',
+    openGymLimits: 'Zwei Gewichte werden als Gesamtgewicht exportiert. Seiten bei Zeitsätzen bleiben in den Trainingsnotizen erhalten. openGym fasst wiederholte Übungen zusammen und überspringt reine Null-Sätze; prüfe die Importvorschau. Bewahre auch ein JSON-Backup der vollständigen Originaldaten auf.',
+    downloadOpenGym: 'openGym-CSV herunterladen',
     comingSoon: 'Weitere Werkzeuge können hier später ergänzt werden.'
   }
 } as const
@@ -253,6 +269,20 @@ const t = computed(() => translations[settings.value.language])
           </div>
           <button type="button" class="primary-button" @click="exportWorkoutData">
             {{ t.downloadJson }}
+          </button>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-card-heading">
+            <span class="tool-icon" aria-hidden="true">↑</span>
+            <div>
+              <h2>{{ t.exportOpenGym }}</h2>
+              <p>{{ t.openGymDescription }}</p>
+            </div>
+          </div>
+          <p>{{ t.openGymLimits }}</p>
+          <button type="button" class="primary-button" :disabled="!workouts.length" @click="exportOpenGymData">
+            {{ t.downloadOpenGym }}
           </button>
         </article>
 

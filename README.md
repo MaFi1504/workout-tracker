@@ -19,6 +19,20 @@ Each exercise within a workout has its own notes, separate from the workout's ov
 
 If an exercise search has no matches, choose **Create and add** to save the typed name as a local custom exercise and immediately use it in the workout. This also works in the workout editor. New exercises default to the General tag, kilograms, and reps; further details can be changed later in the exercise library.
 
+## Moving your history to openGym
+
+On the browser/device where you recorded your workouts, open **Tools → Move to openGym → Download openGym CSV**. In [openGym](https://github.com/DuarteSantos8/openGym), go to **Settings → Data & backup → Import from another app**, select the CSV, review the preview, and confirm.
+
+The export uses openGym's native CSV format, with one row per saved round, explicit kilogram units, workout dates/times, exercise names, reps or seconds, and workout/exercise notes. Exercise names are matched to openGym's library; unmatched names become custom exercises. Active drafts are not exported: save them first.
+
+- Two weights (for example, `2 × 8 kg`) become the combined load (`16 kg`) to preserve lifting volume; the original weight configuration is retained in workout notes.
+- Left/right rep sets use openGym's side field. Timed sets retain seconds, with their side recorded in workout notes because openGym does not support timed per-side sets.
+- Workouts sharing a date, start minute, and title receive their original ID in the exported title so openGym does not merge them. Date-only legacy workouts use midnight. Workout end times are unknown and left blank.
+- Exercise notes longer than openGym's 280-character limit are also copied into workout notes. Source and workout type, when present, are retained there too.
+- openGym combines repeated entries for the same exercise within a workout and skips sets with zero weight and zero reps/seconds (and consequently workouts containing only those sets). Its importer also rejects invalid dates and out-of-range measurements; check its preview before confirming.
+
+**Also download the existing JSON export as an archival backup** before switching. It preserves the exact original records, custom exercise catalog, and measurement preferences. The CSV transfers history, not routines, unused exercises, or app settings. Exporting does not modify or delete your data.
+
 ## Development
 
 Install dependencies and start the development server:
