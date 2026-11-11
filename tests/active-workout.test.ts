@@ -20,12 +20,17 @@ beforeEach(() => {
 describe('active workout', () => {
   it('restores a stored in-progress workout including its original date', () => {
     const restored = normalizeActiveWorkout({ date: '2026-11-01', title: 'Legs', notes: 'Felt good', exercises: [exercise] })
-    expect(restored).toEqual({ date: '2026-11-01', title: 'Legs', notes: 'Felt good', exercises: [exercise] })
+    expect(restored).toEqual({ date: '2026-11-01', durationMinutes: null, durationSeconds: null, title: 'Legs', notes: 'Felt good', exercises: [exercise] })
   })
 
   it('falls back to a fresh workout for missing or invalid data', () => {
-    expect(normalizeActiveWorkout(null)).toEqual({ date: today(), title: DEFAULT_ACTIVE_WORKOUT_TITLE, notes: '', exercises: [] })
+    expect(normalizeActiveWorkout(null)).toEqual({ date: today(), durationMinutes: null, durationSeconds: null, title: DEFAULT_ACTIVE_WORKOUT_TITLE, notes: '', exercises: [] })
     expect(normalizeActiveWorkout({ title: 5, exercises: [{ foo: 1 }, exercise] }).exercises).toEqual([exercise])
+  })
+
+  it('restores valid duration inputs and clears invalid values', () => {
+    expect(normalizeActiveWorkout({ durationMinutes: 12, durationSeconds: 34 }).durationMinutes).toBe(12)
+    expect(normalizeActiveWorkout({ durationMinutes: 12, durationSeconds: 60 })).toMatchObject({ durationMinutes: 12, durationSeconds: null })
   })
 
   it('starts an empty draft from an earlier day on today', () => {
@@ -38,6 +43,6 @@ describe('active workout', () => {
     storage.activeWorkout.value.title = 'Legs'
     expect(useWorkoutStorage().activeWorkout.value.exercises).toHaveLength(1)
     storage.resetActiveWorkout()
-    expect(useWorkoutStorage().activeWorkout.value).toEqual({ date: today(), title: DEFAULT_ACTIVE_WORKOUT_TITLE, notes: '', exercises: [] })
+    expect(useWorkoutStorage().activeWorkout.value).toEqual({ date: today(), durationMinutes: null, durationSeconds: null, title: DEFAULT_ACTIVE_WORKOUT_TITLE, notes: '', exercises: [] })
   })
 })

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
 import type { Ref } from 'vue'
 import { playlistExercises } from '../data/exerciseCatalog'
-import { useWorkoutStorage } from '../composables/useWorkoutStorage'
+import { DEFAULT_WORKOUT_FOCUS, normalizeWorkoutSettings, useWorkoutStorage } from '../composables/useWorkoutStorage'
 import { findMatchingExercise } from '../utils/exerciseMatching'
 
 const states = new Map<string, Ref>()
@@ -17,6 +17,11 @@ beforeEach(() => {
 })
 
 describe('exercise measurement configuration', () => {
+  it('restores a manually configured focus and defaults existing settings', () => {
+    expect(normalizeWorkoutSettings({ language: 'de', focus: 'Run a 5K' })).toEqual({ language: 'de', focus: 'Run a 5K' })
+    expect(normalizeWorkoutSettings({ language: 'de' })).toEqual({ language: 'de', focus: DEFAULT_WORKOUT_FOCUS })
+  })
+
   it('keeps the expanded catalog unique and resolves common new aliases', () => {
     const ids = playlistExercises.map((exercise) => exercise.id)
     const names = playlistExercises.map((exercise) => exercise.name.toLowerCase())
@@ -78,5 +83,12 @@ describe('exercise measurement configuration', () => {
     expect(storage.measurementLabel('plank')).toBe('Sekunden')
     expect(storage.measurementLabel('legacy')).toBe('Wiederholungen')
     expect(storage.measurementLabel('unknown')).toBe('Wiederholungen')
+  })
+
+  it('updates and preserves the workout focus when language changes', () => {
+    const storage = useWorkoutStorage()
+    storage.setFocus('Improve mobility')
+    storage.setLanguage('de')
+    expect(storage.settings.value).toEqual({ language: 'de', focus: 'Improve mobility' })
   })
 })

@@ -23,6 +23,7 @@ export const updateRoundWeight = (rounds: RoundEntry[], roundIndex: number, weig
 const pad = (value: number) => String(value).padStart(2, '0')
 export const localDateIso = (date = new Date()) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 export const localTimeIso = (date = new Date()) => `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+export const formatWorkoutDuration = (durationSeconds: number) => `${Math.floor(durationSeconds / 60)}:${pad(durationSeconds % 60)}`
 // Local time of day the workout took place; date-only legacy workouts start at midnight.
 export const workoutTime = (workout: Pick<Workout, 'createdAt'>) => {
   const timestamp = workout.createdAt ? new Date(workout.createdAt) : null

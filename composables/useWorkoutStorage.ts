@@ -55,6 +55,7 @@ export interface Workout {
   id: string
   date: string
   createdAt?: string
+  durationSeconds?: number
   title: string
   source?: string
   workoutType?: string
@@ -65,6 +66,8 @@ export interface Workout {
 // In-progress workout on the overview page, persisted until the user saves it.
 export interface ActiveWorkout {
   date: string
+  durationMinutes: number | null
+  durationSeconds: number | null
   title: string
   notes: string
   exercises: WorkoutExercise[]
@@ -76,6 +79,8 @@ const todayIso = () => localDateIso()
 
 export const createActiveWorkout = (): ActiveWorkout => ({
   date: todayIso(),
+  durationMinutes: null,
+  durationSeconds: null,
   title: DEFAULT_ACTIVE_WORKOUT_TITLE,
   notes: '',
   exercises: []
@@ -83,6 +88,16 @@ export const createActiveWorkout = (): ActiveWorkout => ({
 
 export interface WorkoutSettings {
   language: WorkoutLanguage
+  focus: string
+}
+
+export const DEFAULT_WORKOUT_FOCUS = 'Consistency'
+export const normalizeWorkoutSettings = (value: unknown): WorkoutSettings => {
+  const settings = value && typeof value === 'object' ? value as Partial<WorkoutSettings> : {}
+  return {
+    language: settings.language === 'de' ? 'de' : 'en',
+    focus: typeof settings.focus === 'string' ? settings.focus : DEFAULT_WORKOUT_FOCUS
+  }
 }
 
 const STORAGE_KEYS = {
@@ -169,7 +184,11 @@ export const normalizeWorkouts = (value: unknown): Workout[] => {
   return value.flatMap((item, index) => {
     if (item && Array.isArray(item.exercises)) {
       const workout = item as Workout
-      return [{ ...workout, exercises: workout.exercises.map(normalizeWorkoutExerciseNotes) }]
+      const normalizedWorkout = { ...workout, exercises: workout.exercises.map(normalizeWorkoutExerciseNotes) }
+      if (!Number.isSafeInteger(workout.durationSeconds) || (workout.durationSeconds ?? -1) < 0) {
+        delete normalizedWorkout.durationSeconds
+      }
+      return [normalizedWorkout]
     }
 
     const legacy = item as {
@@ -258,6 +277,8 @@ export const normalizeActiveWorkout = (value: unknown): ActiveWorkout => {
   return {
     // An empty draft from an earlier day should start fresh on today's date.
     date: exercises.length && typeof item.date === 'string' && item.date ? item.date : todayIso(),
+    durationMinutes: Number.isSafeInteger(item.durationMinutes) && (item.durationMinutes ?? -1) >= 0 ? item.durationMinutes! : null,
+    durationSeconds: Number.isSafeInteger(item.durationSeconds) && (item.durationSeconds ?? -1) >= 0 && (item.durationSeconds ?? 60) < 60 ? item.durationSeconds! : null,
     title: typeof item.title === 'string' ? item.title : DEFAULT_ACTIVE_WORKOUT_TITLE,
     notes: typeof item.notes === 'string' ? item.notes : '',
     exercises
@@ -283,9 +304,9 @@ export const useWorkoutStorage = () => {
       storedWorkouts ?? readStorage(STORAGE_KEYS.legacyWorkouts, [])
     )
   )
-  const settings = useState<WorkoutSettings>('workout-settings', () => ({
-    language: readStorage<WorkoutSettings>(STORAGE_KEYS.settings, { language: 'en' }).language || 'en'
-  }))
+  const settings = useState<WorkoutSettings>('workout-settings', () =>
+    normalizeWorkoutSettings(readStorage<unknown>(STORAGE_KEYS.settings, null))
+  )
   const exerciseUnits = useState<Record<string, ExerciseMeasurementUnit>>(
     'exercise-units',
     () => readStorage(STORAGE_KEYS.exerciseUnits, {})
@@ -308,9 +329,7 @@ export const useWorkoutStorage = () => {
       workouts.value = normalizeWorkouts(
         readStorage<unknown>(STORAGE_KEYS.workouts, null) ?? readStorage(STORAGE_KEYS.legacyWorkouts, workouts.value)
       )
-      settings.value = {
-        language: readStorage<WorkoutSettings>(STORAGE_KEYS.settings, settings.value).language || 'en'
-      }
+      settings.value = normalizeWorkoutSettings(readStorage<unknown>(STORAGE_KEYS.settings, settings.value))
       exerciseUnits.value = readStorage(STORAGE_KEYS.exerciseUnits, {})
       activeWorkout.value = normalizeActiveWorkout(readStorage<unknown>(STORAGE_KEYS.activeWorkout, null))
     }
@@ -342,6 +361,10 @@ export const useWorkoutStorage = () => {
 
   const setLanguage = (language: WorkoutLanguage) => {
     settings.value = { ...settings.value, language }
+  }
+
+  const setFocus = (focus: string) => {
+    settings.value = { ...settings.value, focus }
   }
 
   const addExercise = (input: { name: string; tags: string[]; description: string; defaultWeightUnit: 'kg' | 'lb'; measurementUnit?: ExerciseMeasurementUnit }) => {
@@ -479,6 +502,7 @@ export const useWorkoutStorage = () => {
     workouts,
     settings,
     setLanguage,
+    setFocus,
     addExercise,
     updateExercise,
     addWorkout,

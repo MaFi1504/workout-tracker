@@ -4,7 +4,7 @@ import { combineDateAndTime, localDateIso, localTimeIso, nextRoundSide, updateRo
 import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
 import { matchesExerciseSearch } from '~/utils/exerciseMatching'
 
-const { settings, customExercises, workouts, seedExercises, replaceSeedExercises, addWorkout, addExercise, isTimedExercise, measurementLabel, activeWorkout, resetActiveWorkout } = useWorkoutStorage()
+const { settings, customExercises, workouts, seedExercises, replaceSeedExercises, addWorkout, addExercise, isTimedExercise, measurementLabel, activeWorkout, resetActiveWorkout, setFocus } = useWorkoutStorage()
 const route = useRoute()
 const router = useRouter()
 
@@ -19,6 +19,13 @@ const hoveredInfoExerciseId = ref<string | null>(null)
 const collapsedDraftExerciseIds = ref(new Set<string>())
 const completedDraftExerciseIds = ref(new Set<string>())
 const form = computed(() => activeWorkout.value)
+const durationSeconds = computed(() => {
+  const minutes = form.value.durationMinutes
+  const seconds = form.value.durationSeconds
+  return minutes === null && seconds === null
+    ? undefined
+    : Math.max(0, Math.floor(Number(minutes) || 0)) * 60 + Math.min(59, Math.max(0, Math.floor(Number(seconds) || 0)))
+})
 
 const commonWeightsKg = [1, 3, 5, 8, 10] as const
 const weightDialogOpen = ref(false)
@@ -66,6 +73,9 @@ const translations = {
     remove: 'Remove',
     noExercises: 'Add exercises from the catalog to start this workout.',
     date: 'Date',
+    duration: 'Duration',
+    minutes: 'min',
+    seconds: 'sec',
     sets: 'Sets',
     reps: 'Reps',
     weight: 'Weight',
@@ -130,6 +140,9 @@ const translations = {
     remove: 'Entfernen',
     noExercises: 'Füge Übungen aus dem Katalog hinzu, um das Training zu starten.',
     date: 'Datum',
+    duration: 'Dauer',
+    minutes: 'Min.',
+    seconds: 'Sek.',
     sets: 'Sätze',
     reps: 'Wiederholungen',
     weight: 'Gewicht',
@@ -158,6 +171,10 @@ const translations = {
 } as const
 
 const t = computed(() => translations[settings.value.language])
+const focus = computed({
+  get: () => settings.value.focus,
+  set: setFocus
+})
 const availableExercises = computed(() => [...seedExercises.value, ...customExercises.value])
 
 const filteredExercises = computed(() => {
@@ -316,6 +333,8 @@ const loadWorkout = (workout: Workout) => {
   completedDraftExerciseIds.value = new Set()
   form.value.title = workout.title
   form.value.date = today()
+  form.value.durationMinutes = null
+  form.value.durationSeconds = null
   form.value.notes = workout.notes
   selectedExerciseId.value = draftExercises.value[0]?.exerciseId || selectedExerciseId.value
 }
@@ -412,7 +431,7 @@ const toggleDraftExerciseCompleted = (draftId: string) => {
 
 const createAndAddExercise = () => {
   const name = search.value.trim()
-  if (!name || filteredExercises.value.length) return
+  if (!name) return
   const exercise = addExercise({ name, tags: ['General'], description: '', defaultWeightUnit: 'kg' })
   if (!exercise) return
   selectedExerciseId.value = exercise.id
@@ -473,6 +492,7 @@ const handleAddWorkout = () => {
   addWorkout({
     date: form.value.date,
     createdAt: combineDateAndTime(form.value.date, localTimeIso()),
+    ...(durationSeconds.value === undefined ? {} : { durationSeconds: durationSeconds.value }),
     title: form.value.title.trim(),
     exercises: draftExercises.value.map((exercise, index) => ({
       ...exercise,
@@ -508,7 +528,7 @@ const handleAddWorkout = () => {
         </article>
         <article class="metric-card active-goal">
           <span>{{ t.activeGoal }}</span>
-          <strong>Consistency</strong>
+          <input v-model="focus" class="focus-input" type="text" :aria-label="t.activeGoal" />
         </article>
         <article class="metric-card accent">
           <span>Volume</span>
@@ -531,7 +551,7 @@ const handleAddWorkout = () => {
 
           <div class="exercise-list">
             <button
-              v-if="search.trim() && !filteredExercises.length"
+              v-if="search.trim()"
               type="button"
               class="primary-button"
               @click="createAndAddExercise"
@@ -565,11 +585,20 @@ const handleAddWorkout = () => {
               <input v-model="form.title" type="text" />
             </label>
 
-            <label>
-              {{ t.date }}
-              <input v-model="form.date" type="date" lang="de-DE" />
-              <span class="date-preview">{{ formatGermanDate(form.date) }}</span>
-            </label>
+            <div class="date-duration-row">
+              <label>
+                {{ t.date }}
+                <input v-model="form.date" type="date" lang="de-DE" />
+                <span class="date-preview">{{ formatGermanDate(form.date) }}</span>
+              </label>
+              <label>
+                {{ t.duration }}
+                <span class="duration-inputs">
+                  <span><input v-model.number="form.durationMinutes" type="number" min="0" step="1" :aria-label="t.minutes" /><small>{{ t.minutes }}</small></span>
+                  <span><input v-model.number="form.durationSeconds" type="number" min="0" max="59" step="1" :aria-label="t.seconds" /><small>{{ t.seconds }}</small></span>
+                </span>
+              </label>
+            </div>
 
             <div v-if="draftExercises.length" class="draft-exercise-list">
               <article
@@ -929,6 +958,24 @@ p {
 .metric-card.active-goal strong {
   font-size: clamp(1.25rem, 4vw, 2rem);
   overflow-wrap: anywhere;
+}
+
+.focus-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-size: clamp(1.25rem, 4vw, 2rem);
+  font-weight: 700;
+}
+
+.focus-input:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .metric-card.accent {
@@ -1299,6 +1346,33 @@ p {
   font-size: 0.85rem;
 }
 
+.date-duration-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.duration-inputs,
+.duration-inputs > span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.duration-inputs > span {
+  min-width: 0;
+}
+
+.duration-inputs input {
+  width: 5rem;
+  min-width: 0;
+}
+
+.duration-inputs small {
+  color: #64748b;
+  font-weight: 400;
+}
+
 .input-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1424,6 +1498,10 @@ p {
 
   .panel {
     padding: 1rem;
+  }
+
+  .date-duration-row {
+    grid-template-columns: 1fr;
   }
 
   .round-row {

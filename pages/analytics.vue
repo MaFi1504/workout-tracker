@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Exercise, Workout } from '~/composables/useWorkoutStorage'
-import { exerciseVolume, workoutVolume } from '~/domain/workout-domain'
+import { exerciseVolume, formatWorkoutDuration, workoutVolume } from '~/domain/workout-domain'
 
 const { settings, seedExercises, customExercises, workouts, isTimedExercise, measurementLabel } = useWorkoutStorage()
 
@@ -40,6 +40,7 @@ const translations = {
     reps: 'reps',
     volume: 'kg volume',
     workoutHistory: 'Workout history',
+    duration: 'Duration',
     workouts: 'workouts',
     rounds: 'rounds',
     activity: 'Workout activity',
@@ -75,6 +76,7 @@ const translations = {
     reps: 'Wdh.',
     volume: 'kg Volumen',
     workoutHistory: 'Trainingsverlauf',
+    duration: 'Dauer',
     workouts: 'Trainingseinheiten',
     rounds: 'Runden',
     activity: 'Trainingsaktivität',
@@ -445,7 +447,10 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
               <strong>{{ workout.title }}</strong>
               <small>{{ formatDate(workout.date) }} · {{ workout.exercises.length }} {{ t.exercises }}</small>
             </span>
-            <strong>{{ workoutVolume(workout, allExercises) }} {{ t.kg }}</strong>
+            <span class="workout-history-metrics">
+              <strong>{{ workoutVolume(workout, allExercises) }} {{ t.kg }}</strong>
+              <small v-if="workout.durationSeconds !== undefined">{{ t.duration }}: {{ formatWorkoutDuration(workout.durationSeconds) }}</small>
+            </span>
           </button>
         </div>
         <p v-else class="empty-analytics">{{ t.noWorkouts }}</p>
@@ -770,6 +775,10 @@ const showHeatmapTooltipAtCell = (date: string, event: MouseEvent) => {
 
 .workout-history-item small {
   color: #64748b;
+}
+
+.workout-history-metrics {
+  justify-items: end;
 }
 
 .panel {

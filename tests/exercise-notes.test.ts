@@ -32,8 +32,13 @@ describe('exercise note migration', () => {
     const entry = { ...workout, exercises: [{ ...exercise, notes: 'Slow descent\nKeep steady' }] }
     expect(normalizeWorkouts([entry])).toEqual([entry])
     expect(normalizeActiveWorkout(entry)).toEqual({
-      date: entry.date, title: entry.title, notes: entry.notes, exercises: entry.exercises
+      date: entry.date, durationMinutes: null, durationSeconds: null, title: entry.title, notes: entry.notes, exercises: entry.exercises
     })
+  })
+
+  it('preserves valid workout durations and discards invalid ones', () => {
+    expect(normalizeWorkouts([{ ...workout, durationSeconds: 754 }])[0]?.durationSeconds).toBe(754)
+    expect(normalizeWorkouts([{ ...workout, durationSeconds: -1 }])[0]).not.toHaveProperty('durationSeconds')
   })
 
   it('defaults notes on active drafts and legacy entries without discarding mixed-format workouts', () => {

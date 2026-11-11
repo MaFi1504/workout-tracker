@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { combineDateAndTime, exerciseVolume, workoutTime, workoutVolume } from '~/domain/workout-domain'
+import { combineDateAndTime, exerciseVolume, formatWorkoutDuration, workoutTime, workoutVolume } from '~/domain/workout-domain'
 import type { RoundEntry, Workout, WorkoutExercise } from '~/composables/useWorkoutStorage'
 import { normalizeExerciseName } from '~/utils/exerciseMatching'
 
@@ -10,6 +10,8 @@ const workout = computed(() => workouts.value.find((item) => item.id === route.p
 const draft = ref<Workout | null>(null)
 const editing = ref(false)
 const draftTime = ref('00:00:00')
+const draftDurationMinutes = ref<number | null>(null)
+const draftDurationSeconds = ref<number | null>(null)
 const commonWeightsKg = [1, 3, 5, 8, 10] as const
 const weightDialogOpen = ref(false)
 const weightDialogRound = ref<RoundEntry | null>(null)
@@ -19,8 +21,8 @@ const newExerciseId = ref('')
 const returnPath = computed(() => route.query.from === 'analytics' ? '/analytics' : '/')
 
 const translations = {
-  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', loadWorkout: 'Load as new workout', delete: 'Delete workout', confirmDelete: 'Are you sure you want to delete this workout?', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', repsPerSide: 'reps per side', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', time: 'Time', notFound: 'Workout not found.', saved: 'Changes saved.', weightDialog: 'Select weight', currentWeight: 'Current weight', quickWeights: 'Quick weights', bodyweight: 'Bodyweight', apply: 'Apply weight', exercise: 'Exercise', addExercise: 'Add exercise', selectExercise: 'Select exercise', removeExercise: 'Remove exercise', addRound: 'Add round', removeRound: 'Remove round', confirmRemoveExercise: 'Remove this exercise from the workout?', searchExercise: 'Type to search exercises…', noResults: 'No matching exercises', alternating: 'alternating' },
-  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', loadWorkout: 'Als neues Training laden', delete: 'Training löschen', confirmDelete: 'Möchtest du dieses Training wirklich löschen?', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', repsPerSide: 'Wiederholungen pro Seite', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', time: 'Uhrzeit', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.', weightDialog: 'Gewicht auswählen', currentWeight: 'Aktuelles Gewicht', quickWeights: 'Schnellgewichte', bodyweight: 'Körpergewicht', apply: 'Gewicht übernehmen', exercise: 'Übung', addExercise: 'Übung hinzufügen', selectExercise: 'Übung auswählen', removeExercise: 'Übung entfernen', addRound: 'Runde hinzufügen', removeRound: 'Runde entfernen', confirmRemoveExercise: 'Diese Übung aus dem Training entfernen?', searchExercise: 'Übung suchen…', noResults: 'Keine passenden Übungen', alternating: 'abwechselnd' }
+  en: { title: 'Workout details', back: 'Back to overview', edit: 'Edit workout', loadWorkout: 'Load as new workout', delete: 'Delete workout', confirmDelete: 'Are you sure you want to delete this workout?', save: 'Save changes', cancel: 'Cancel', stats: 'Workout stats', volume: 'Volume', exercises: 'Exercises', rounds: 'Rounds', reps: 'Reps', repsPerSide: 'reps per side', weight: 'Weight (kg)', date: 'Date', workoutTitle: 'Workout title', notes: 'Notes', time: 'Time', duration: 'Duration', minutes: 'min', seconds: 'sec', notFound: 'Workout not found.', saved: 'Changes saved.', weightDialog: 'Select weight', currentWeight: 'Current weight', quickWeights: 'Quick weights', bodyweight: 'Bodyweight', apply: 'Apply weight', exercise: 'Exercise', addExercise: 'Add exercise', selectExercise: 'Select exercise', removeExercise: 'Remove exercise', addRound: 'Add round', removeRound: 'Remove round', confirmRemoveExercise: 'Remove this exercise from the workout?', searchExercise: 'Type to search exercises…', noResults: 'No matching exercises', alternating: 'alternating' },
+  de: { title: 'Trainingsdetails', back: 'Zur Übersicht', edit: 'Training bearbeiten', loadWorkout: 'Als neues Training laden', delete: 'Training löschen', confirmDelete: 'Möchtest du dieses Training wirklich löschen?', save: 'Änderungen speichern', cancel: 'Abbrechen', stats: 'Trainingsstatistik', volume: 'Volumen', exercises: 'Übungen', rounds: 'Runden', reps: 'Wiederholungen', repsPerSide: 'Wiederholungen pro Seite', weight: 'Gewicht (kg)', date: 'Datum', workoutTitle: 'Name des Trainings', notes: 'Notizen', time: 'Uhrzeit', duration: 'Dauer', minutes: 'Min.', seconds: 'Sek.', notFound: 'Training nicht gefunden.', saved: 'Änderungen gespeichert.', weightDialog: 'Gewicht auswählen', currentWeight: 'Aktuelles Gewicht', quickWeights: 'Schnellgewichte', bodyweight: 'Körpergewicht', apply: 'Gewicht übernehmen', exercise: 'Übung', addExercise: 'Übung hinzufügen', selectExercise: 'Übung auswählen', removeExercise: 'Übung entfernen', addRound: 'Runde hinzufügen', removeRound: 'Runde entfernen', confirmRemoveExercise: 'Diese Übung aus dem Training entfernen?', searchExercise: 'Übung suchen…', noResults: 'Keine passenden Übungen', alternating: 'abwechselnd' }
 } as const
 const t = computed(() => translations[settings.value.language])
 const availableExercises = computed(() => [...seedExercises.value, ...customExercises.value])
@@ -100,6 +102,8 @@ const startEdit = () => {
     }))
   }
   draftTime.value = workoutTime(workout.value)
+  draftDurationMinutes.value = workout.value.durationSeconds === undefined ? null : Math.floor(workout.value.durationSeconds / 60)
+  draftDurationSeconds.value = workout.value.durationSeconds === undefined ? null : workout.value.durationSeconds % 60
   editing.value = true
 }
 const cancelEdit = () => {
@@ -113,6 +117,9 @@ const save = () => {
     title: draft.value.title.trim(),
     date: draft.value.date,
     createdAt: combineDateAndTime(draft.value.date, draftTime.value),
+    durationSeconds: draftDurationMinutes.value === null && draftDurationSeconds.value === null
+      ? undefined
+      : Math.max(0, Math.floor(Number(draftDurationMinutes.value) || 0)) * 60 + Math.min(59, Math.max(0, Math.floor(Number(draftDurationSeconds.value) || 0))),
     notes: draft.value.notes,
     exercises: renumberExercises(draft.value.exercises)
   })
@@ -186,6 +193,7 @@ const applyWeightDialog = () => {
             <label>{{ t.workoutTitle }}<input v-model="draft!.title" type="text" /></label>
             <label>{{ t.date }}<input v-model="draft!.date" type="date" /></label>
             <label>{{ t.time }}<input v-model="draftTime" type="time" step="1" /></label>
+            <label>{{ t.duration }}<span class="duration-inputs"><span><input v-model.number="draftDurationMinutes" type="number" min="0" step="1" :aria-label="t.minutes" /><small>{{ t.minutes }}</small></span><span><input v-model.number="draftDurationSeconds" type="number" min="0" max="59" step="1" :aria-label="t.seconds" /><small>{{ t.seconds }}</small></span></span></label>
           </template>
           <template v-else>
             <span class="eyebrow">{{ t.title }}</span>
@@ -199,6 +207,7 @@ const applyWeightDialog = () => {
           <article class="stat-card"><span>{{ t.exercises }}</span><strong>{{ current.exercises.length }}</strong></article>
           <article class="stat-card"><span>{{ t.rounds }}</span><strong>{{ totalRounds }}</strong></article>
           <article class="stat-card"><span>{{ t.reps }}</span><strong>{{ totalReps }}</strong></article>
+          <article v-if="current.durationSeconds !== undefined" class="stat-card"><span>{{ t.duration }}</span><strong>{{ formatWorkoutDuration(current.durationSeconds) }}</strong></article>
           <article v-if="current.exercises.some((exercise) => isTimedExercise(exercise.exerciseId))" class="stat-card"><span>{{ settings.language === 'de' ? 'Sekunden' : 'Seconds' }}</span><strong>{{ totalSeconds }}</strong></article>
         </section>
 
@@ -302,6 +311,10 @@ const applyWeightDialog = () => {
 button:disabled { opacity: .5; cursor: not-allowed; }
 .weight-trigger { cursor: pointer; background: #eef2ff; color: #312e81; font-weight: 600; }
 .heading-panel label, .notes-panel label { display: grid; gap: .35rem; color: #334155; font-weight: 600; }
+.duration-inputs, .duration-inputs > span { display: flex; align-items: center; gap: .4rem; }
+.duration-inputs > span { min-width: 0; }
+.duration-inputs input { width: 5rem; min-width: 0; }
+.duration-inputs small { color: #64748b; font-weight: 400; }
 .notes-panel textarea { resize: vertical; font: inherit; }
 .empty-state { color: #64748b; }
 .weight-dialog-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 1rem; background: rgba(15, 23, 42, .45); }
